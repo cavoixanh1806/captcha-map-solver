@@ -1,0 +1,54 @@
+# CRNN + CTC configuration (Keras OCR-for-CAPTCHA style)
+# Hardware target: NVIDIA RTX 3060 8GB VRAM (CUDA 12.8+)
+
+data:
+  data_dir: data
+  metadata: data/metadata.csv
+  splits_file: configs/splits.json   # cung 1 split voi baseline de so sanh
+  train_size: 400
+  val_size: 50
+  test_size: 50
+  seed: 42
+
+image:
+  height: 128
+  width: 128
+  alphabet: "3479ACDEFHJKLMNPQRTUVWXY"
+  char_len: 5
+
+augment:
+  # Anh da bi convert sang kenh saturation. Augmentation o muc vua phai.
+  rotation_degrees: 8
+  translate: 0.06
+  scale_min: 0.85
+  scale_max: 1.15
+  shear: 5
+  brightness: 0.20
+  contrast: 0.20
+  saturation: 0.0
+  hue: 0.0
+  random_erasing_prob: 0.30
+  random_erasing_scale_min: 0.02
+  random_erasing_scale_max: 0.15
+
+solver:
+  task: ctc                # "head" (multi-head CNN) | "ctc" (CRNN + CTC)
+  backbone: crnn           # khong dung khi task=ctc, gia tri chi de log
+  pretrained: false
+  rnn_hidden: 256
+  optimizer: adamw
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+  scheduler: cosine
+  batch_size: 32
+  epochs: 200
+  precision: 16-mixed
+  num_workers: 4
+  early_stopping_patience: 40
+  dropout: 0.3
+  label_smoothing: 0.0     # CTC khong dung label smoothing
+
+logging:
+  log_dir: tb_logs
+  ckpt_dir: checkpoints
+  exp_name: crnn-ctc

@@ -19,6 +19,15 @@ from src.dataset import CaptchaDataModule
 from src.model import CaptchaModel
 
 
+def build_model(cfg):
+    task = cfg["solver"].get("task", "head").lower()
+    if task == "ctc":
+        from src.crnn import CTCCaptchaModel
+
+        return CTCCaptchaModel(cfg)
+    return CaptchaModel(cfg)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
@@ -30,10 +39,13 @@ def main() -> None:
     if args.exp_name:
         cfg["logging"]["exp_name"] = args.exp_name
 
+    # honour the Tensor Cores hint for RTX 3060+
+    torch.set_float32_matmul_precision("high")
+
     pl.seed_everything(cfg["data"]["seed"], workers=True)
 
     dm = CaptchaDataModule(cfg)
-    model = CaptchaModel(cfg)
+    model = build_model(cfg)
 
     ckpt_dir = Path(cfg["logging"]["ckpt_dir"]) / cfg["logging"]["exp_name"]
     ckpt_dir.mkdir(parents=True, exist_ok=True)
