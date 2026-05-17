@@ -73,8 +73,13 @@ class TrOCRDataset(Dataset):
             img = self.aug(img)
 
         pixel_values = self.processor(images=img, return_tensors="pt").pixel_values[0]
+        # CRITICAL: BPE merges adjacent letters (e.g. "TN" -> single token).
+        # Inserting spaces forces every captcha char to tokenise to a single
+        # "_<char>" token, giving a fixed-length token sequence the decoder
+        # can learn reliably.
+        spaced = " ".join(text)
         labels = self.processor.tokenizer(
-            text,
+            spaced,
             padding="max_length",
             max_length=self.max_length,
             truncation=True,
@@ -199,9 +204,10 @@ class TrOCRLitModel(pl.LightningModule):
 
     def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids):
         # input_ids is a 1-D LongTensor of tokens already generated for this
-        # beam, including the decoder_start token at position 0. We need to
-        # constrain positions 1..CHAR_LEN to alphabet, position CHAR_LEN+1
-        # to EOS, then PAD afterwards.
+        # beam, including the decoder_start token at position 0.
+        # With space-tokenised labels, each captcha char becomes one "_<char>"
+        # token, so positions 1..CHAR_LEN must be alphabet, position
+        # CHAR_LEN+1 must be EOS, then PAD.
         pos = int(input_ids.shape[-1])  # number of tokens emitted so far
         if pos <= CHAR_LEN:
             return self._alphabet_token_ids
@@ -226,7 +232,8 @@ class TrOCRLitModel(pl.LightningModule):
             kwargs["prefix_allowed_tokens_fn"] = self._prefix_allowed_tokens_fn
         gen = self.model.generate(pixel_values, **kwargs)
         decoded = self.processor.batch_decode(gen, skip_special_tokens=True)
-        # Captcha labels are uppercase A-Z + digits; strip whitespace and uppercase
+        # Labels were trained with spaces between chars to force per-char
+        # tokenisation; strip them back out and uppercase for comparison.
         return [d.replace(" ", "").upper() for d in decoded]
 
     def _eval_step(self, batch, prefix: str) -> torch.Tensor:

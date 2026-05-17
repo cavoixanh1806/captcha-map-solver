@@ -48,6 +48,20 @@ def main() -> None:
     print("\nLength distribution across 10 samples:", dict(length_dist))
     print(f"\nMulti-token chars: {bad_chars or 'NONE'}")
 
+    print("\n" + "=" * 60)
+    print("SPACE-SEPARATED tokenization (current training format):")
+    print("=" * 60)
+    spaced_dist = Counter()
+    for lbl in sample_labels:
+        spaced = " ".join(lbl)
+        ids = tok(spaced, return_tensors=None).input_ids
+        pieces = tok.convert_ids_to_tokens(ids)
+        decoded = tok.decode(ids, skip_special_tokens=True).replace(" ", "")
+        ok = "OK" if len(ids) == 7 else f"WRONG (expected 7, got {len(ids)})"
+        print(f"  '{spaced}' -> {len(ids)} tokens: {pieces}  ->  decode='{decoded}'  [{ok}]")
+        spaced_dist[len(ids)] += 1
+    print("\nLength distribution (spaced):", dict(spaced_dist))
+
 
 if __name__ == "__main__":
     main()

@@ -38,9 +38,9 @@ solver:
   num_workers: 2
   early_stopping_patience: 8
   num_beams: 8
-  max_length: 16          # CLS + 5 chars (BPE may split, max ~10) + SEP -> 16 is safe
-  repetition_penalty: 1.3      # discourage XFFYX / V3XXX style repeats
-  constrained_decoding: false  # BPE may merge adjacent chars -> forcing 5 single-char tokens hurts
+  max_length: 12          # CLS + 5 spaced chars + SEP -> 7 tokens; pad to 12 is safe
+  repetition_penalty: 1.0      # not needed once labels are per-char tokenised
+  constrained_decoding: true   # safe now that BPE produces 1 token per char
 
 logging:
   log_dir: tb_logs
