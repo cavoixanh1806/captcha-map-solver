@@ -177,10 +177,13 @@ class EncoderClf(pl.LightningModule):
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         # Encoder may be partially frozen but we still let autograd handle it
         feat = self.encoder(pixel_values=pixel_values).last_hidden_state
-        # Drop the CLS token, reshape patch tokens into a 2D grid
-        feat = feat[:, 1:, :]                                # (B, N, D)
-        bs, n, d = feat.shape
-        h = w = int(n ** 0.5)
+        # DeiT has TWO special tokens (CLS + distillation), not just 1.
+        # Take the last H*W tokens which are guaranteed to be patch tokens.
+        bs, n_total, d = feat.shape
+        img = self.encoder.config.image_size
+        patch = self.encoder.config.patch_size
+        h = w = img // patch
+        feat = feat[:, -h * w:, :]                            # (B, H*W, D)
         feat = feat.reshape(bs, h, w, d).permute(0, 3, 1, 2)  # (B, D, H, W)
         # Pool to (B, D, 1, CHAR_LEN) -> (B, CHAR_LEN, D)
         feat = F.adaptive_avg_pool2d(feat, (1, CHAR_LEN))
