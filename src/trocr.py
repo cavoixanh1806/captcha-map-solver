@@ -158,16 +158,23 @@ class TrOCRLitModel(pl.LightningModule):
         self.processor = TrOCRProcessor.from_pretrained(cfg["solver"]["pretrained_model"])
         self.model = VisionEncoderDecoderModel.from_pretrained(cfg["solver"]["pretrained_model"])
 
-        # Configure decoder generation defaults for our short captcha text
+        # Token ids that the encoder-decoder needs at construction time
         self.model.config.decoder_start_token_id = self.processor.tokenizer.cls_token_id
         self.model.config.pad_token_id = self.processor.tokenizer.pad_token_id
         self.model.config.eos_token_id = self.processor.tokenizer.sep_token_id
         self.model.config.vocab_size = self.model.config.decoder.vocab_size
-        self.model.config.max_length = cfg["solver"]["max_length"]
-        self.model.config.early_stopping = True
-        self.model.config.no_repeat_ngram_size = 0
-        self.model.config.length_penalty = 1.0
-        self.model.config.num_beams = cfg["solver"]["num_beams"]
+
+        # transformers >= 4.40 requires generation defaults on generation_config
+        gc = self.model.generation_config
+        gc.decoder_start_token_id = self.processor.tokenizer.cls_token_id
+        gc.pad_token_id = self.processor.tokenizer.pad_token_id
+        gc.eos_token_id = self.processor.tokenizer.sep_token_id
+        gc.bos_token_id = self.processor.tokenizer.cls_token_id
+        gc.max_length = cfg["solver"]["max_length"]
+        gc.num_beams = cfg["solver"]["num_beams"]
+        gc.early_stopping = True
+        gc.no_repeat_ngram_size = 0
+        gc.length_penalty = 1.0
 
         self._sample_logged = False
 
@@ -181,7 +188,7 @@ class TrOCRLitModel(pl.LightningModule):
         return out.loss
 
     def _generate_decode(self, pixel_values: torch.Tensor) -> List[str]:
-        gen = self.model.generate(pixel_values, max_length=self.cfg["solver"]["max_length"])
+        gen = self.model.generate(pixel_values)
         decoded = self.processor.batch_decode(gen, skip_special_tokens=True)
         # Captcha labels are uppercase A-Z + digits; strip whitespace and uppercase
         return [d.replace(" ", "").upper() for d in decoded]

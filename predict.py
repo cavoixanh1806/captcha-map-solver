@@ -28,9 +28,7 @@ def predict(ckpt: str, image: str, config: str, task: str) -> str:
         img = Image.open(image).convert("RGB")
         pixel_values = model.processor(images=img, return_tensors="pt").pixel_values.to(device)
         with torch.no_grad():
-            gen = model.model.generate(
-                pixel_values, max_length=cfg["solver"]["max_length"], num_beams=cfg["solver"]["num_beams"]
-            )
+            gen = model.model.generate(pixel_values)
         return model.processor.batch_decode(gen, skip_special_tokens=True)[0].replace(" ", "").upper()
 
     if task == "ctc":
