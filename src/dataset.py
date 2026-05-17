@@ -18,7 +18,7 @@ from typing import List, Tuple
 
 import torch
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from torchvision import transforms as T
 
 import pytorch_lightning as pl
@@ -94,6 +94,42 @@ def build_or_load_splits(
 # ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
+class SyntheticDataset(Dataset):
+    """Infinite stream of synthetic captchas mimicking the map_*.png style.
+
+    `length` controls how many samples constitute one epoch. We render on the
+    fly so the model never sees the same image twice; this is the cheapest
+    form of augmentation when only 400 real samples are available.
+    """
+
+    def __init__(self, length: int, transform=None) -> None:
+        from .synth import discover_fonts
+
+        self.length = length
+        self.transform = transform
+        self.fonts = discover_fonts()
+        if not self.fonts:
+            raise RuntimeError(
+                "No TrueType fonts found. Add system fonts or extend "
+                "DEFAULT_FONT_CANDIDATES in src/synth.py."
+            )
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, idx: int):
+        import random as _rnd
+
+        from .synth import render
+
+        rng = _rnd.Random(idx * 7919 + 1)  # deterministic per index, varied per epoch
+        sample = render(text=None, font_paths=self.fonts, rng=rng)
+        img = sample.image
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, str_to_vec(sample.text)
+
+
 class CaptchaDataset(Dataset):
     def __init__(
         self,
@@ -208,7 +244,17 @@ class CaptchaDataModule(pl.LightningDataModule):
         )
         train_t = build_train_transform(cfg)
         eval_t = build_eval_transform(cfg)
-        self.train_ds = CaptchaDataset(cfg["data"]["data_dir"], cfg["data"]["metadata"], split.train, train_t)
+        real_train = CaptchaDataset(cfg["data"]["data_dir"], cfg["data"]["metadata"], split.train, train_t)
+
+        # Optional synthetic mixing: when `solver.synth_per_epoch > 0`, the
+        # train stream becomes (synth + real) so the model sees thousands of
+        # fresh shape/colour combinations on top of the 400 labelled real
+        # samples. The val and test splits stay 100% real.
+        synth_n = int(cfg["solver"].get("synth_per_epoch", 0))
+        if synth_n > 0:
+            self.train_ds = ConcatDataset([SyntheticDataset(synth_n, train_t), real_train])
+        else:
+            self.train_ds = real_train
         self.val_ds = CaptchaDataset(cfg["data"]["data_dir"], cfg["data"]["metadata"], split.val, eval_t)
         self.test_ds = CaptchaDataset(cfg["data"]["data_dir"], cfg["data"]["metadata"], split.test, eval_t)
 
