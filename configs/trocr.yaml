@@ -38,7 +38,7 @@ solver:
   num_workers: 2
   early_stopping_patience: 8
   num_beams: 4
-  max_length: 6           # 5 chars + EOS
+  max_length: 16          # CLS + 5 chars (BPE may split, max ~10) + SEP -> 16 is safe
 
 logging:
   log_dir: tb_logs

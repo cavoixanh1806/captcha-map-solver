@@ -169,12 +169,12 @@ class TrOCRLitModel(pl.LightningModule):
         gc.decoder_start_token_id = self.processor.tokenizer.cls_token_id
         gc.pad_token_id = self.processor.tokenizer.pad_token_id
         gc.eos_token_id = self.processor.tokenizer.sep_token_id
-        gc.bos_token_id = self.processor.tokenizer.cls_token_id
         gc.max_length = cfg["solver"]["max_length"]
         gc.num_beams = cfg["solver"]["num_beams"]
         gc.early_stopping = True
         gc.no_repeat_ngram_size = 0
         gc.length_penalty = 1.0
+        # We DO NOT set bos_token_id: TrOCR uses decoder_start_token_id only.
 
         self._sample_logged = False
 

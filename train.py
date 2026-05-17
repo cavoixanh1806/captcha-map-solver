@@ -66,16 +66,16 @@ def main() -> None:
     callbacks = [
         ModelCheckpoint(
             dirpath=str(ckpt_dir),
-            filename="best-{epoch:03d}-{val/seq_acc:.4f}",
-            monitor="val/seq_acc",
-            mode="max",
+            filename="best-epoch{epoch:03d}",
+            monitor="val/loss",
+            mode="min",
             save_top_k=2,
             save_last=True,
             auto_insert_metric_name=False,
         ),
         EarlyStopping(
-            monitor="val/seq_acc",
-            mode="max",
+            monitor="val/loss",
+            mode="min",
             patience=cfg["solver"]["early_stopping_patience"],
         ),
         LearningRateMonitor(logging_interval="epoch"),
