@@ -147,19 +147,26 @@ class EncoderClf(pl.LightningModule):
 
         hidden = self.encoder.config.hidden_size  # 384 for DeiT-small
 
-        if cfg["solver"].get("freeze_encoder", True):
-            for p in self.encoder.parameters():
-                p.requires_grad = False
-            self.encoder.eval()  # keep BN/LayerNorm in eval mode if any
+        # Optionally unfreeze last `n` transformer blocks so the encoder can
+        # adapt to captcha-specific glyph styles. Keeping the bulk frozen
+        # preserves the pretrained shape prior on 400 samples.
+        unfreeze_last = cfg["solver"].get("unfreeze_last_n", 0)
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+        if unfreeze_last > 0:
+            blocks = self.encoder.encoder.layer  # DeiTLayer list
+            for blk in blocks[-unfreeze_last:]:
+                for p in blk.parameters():
+                    p.requires_grad = True
 
-        # CHAR_LEN learnable query tokens that cross-attend to encoder grid
-        n_q = CHAR_LEN
-        self.queries = nn.Parameter(torch.randn(n_q, hidden) * 0.02)
-        n_heads = cfg["solver"].get("attn_heads", 8)
-        self.attn = nn.MultiheadAttention(hidden, num_heads=n_heads, batch_first=True, dropout=0.1)
-        self.norm = nn.LayerNorm(hidden)
+        # SPATIAL SPLIT pooling: the encoder grid (24x24 for 384x384 input)
+        # is divided into CHAR_LEN equal column-strips. Each strip is
+        # average-pooled to a single hidden-dim vector. This provides
+        # POSITIONAL DIFFERENTIATION BY CONSTRUCTION, avoiding the mode
+        # collapse we saw with learnable queries.
         dropout = cfg["solver"].get("dropout", 0.2)
         self.head = nn.Sequential(
+            nn.LayerNorm(hidden),
             nn.Linear(hidden, hidden),
             nn.GELU(),
             nn.Dropout(dropout),
@@ -168,16 +175,17 @@ class EncoderClf(pl.LightningModule):
         self._sample_logged = False
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        if self.cfg["solver"].get("freeze_encoder", True):
-            with torch.no_grad():
-                feat = self.encoder(pixel_values=pixel_values).last_hidden_state
-        else:
-            feat = self.encoder(pixel_values=pixel_values).last_hidden_state
-        bs = feat.size(0)
-        q = self.queries.unsqueeze(0).expand(bs, -1, -1)  # (B, CHAR_LEN, hidden)
-        attn_out, _ = self.attn(q, feat, feat)
-        attn_out = self.norm(attn_out + q)
-        return self.head(attn_out)  # (B, CHAR_LEN, CLASS_NUM)
+        # Encoder may be partially frozen but we still let autograd handle it
+        feat = self.encoder(pixel_values=pixel_values).last_hidden_state
+        # Drop the CLS token, reshape patch tokens into a 2D grid
+        feat = feat[:, 1:, :]                                # (B, N, D)
+        bs, n, d = feat.shape
+        h = w = int(n ** 0.5)
+        feat = feat.reshape(bs, h, w, d).permute(0, 3, 1, 2)  # (B, D, H, W)
+        # Pool to (B, D, 1, CHAR_LEN) -> (B, CHAR_LEN, D)
+        feat = F.adaptive_avg_pool2d(feat, (1, CHAR_LEN))
+        feat = feat.squeeze(2).transpose(1, 2)               # (B, CHAR_LEN, D)
+        return self.head(feat)                               # (B, CHAR_LEN, CLASS_NUM)
 
     def _step(self, batch):
         x, y = batch

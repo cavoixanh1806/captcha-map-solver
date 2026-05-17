@@ -22,12 +22,11 @@ image:
 solver:
   task: encoder_clf
   pretrained_model: microsoft/trocr-small-printed
-  freeze_encoder: true
-  attn_heads: 8
+  unfreeze_last_n: 2     # adapt last 2 DeiT blocks to captcha style; rest frozen
   dropout: 0.2
   label_smoothing: 0.05
   optimizer: adamw
-  lr: 1.0e-3
+  lr: 5.0e-4
   weight_decay: 0.01
   scheduler: cosine
   batch_size: 16
