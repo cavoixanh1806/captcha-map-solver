@@ -17,34 +17,34 @@ image:
   char_len: 5
 
 augment:
-  # Aggressive augmentation: 400 mau qua nho, model du sung memorize.
-  # Moi ky tu mot mau ngau nhien => co the jitter hue manh hon de buoc model hoc shape.
-  rotation_degrees: 12
-  translate: 0.08
-  scale_min: 0.80
-  scale_max: 1.20
-  shear: 8
-  brightness: 0.30
-  contrast: 0.30
-  saturation: 0.30
-  hue: 0.15
-  random_erasing_prob: 0.50
+  # Anh da bi chuyen sang kenh saturation (xem SaturationEmphasis trong dataset.py)
+  # nen mau khong con la tin hieu. Augmentation o muc vua phai.
+  rotation_degrees: 8
+  translate: 0.06
+  scale_min: 0.85
+  scale_max: 1.15
+  shear: 5
+  brightness: 0.20
+  contrast: 0.20
+  saturation: 0.0   # da bo o preprocessing
+  hue: 0.0          # da bo o preprocessing
+  random_erasing_prob: 0.30
   random_erasing_scale_min: 0.02
-  random_erasing_scale_max: 0.20
+  random_erasing_scale_max: 0.15
 
 solver:
-  backbone: conv          # conv (~5M) | resnet18 (~11M) | resnet34 (~21M)
-  pretrained: false       # ImageNet prior khong giup tren captcha noisy + colorful
+  backbone: resnet18      # resnet18 (~11M) | resnet34 (~21M) | conv (~2M)
+  pretrained: false       # kenh saturation khac xa ImageNet
   optimizer: adamw
-  lr: 1.0e-3
-  weight_decay: 5.0e-3    # weight decay lon de chong overfit
+  lr: 5.0e-4
+  weight_decay: 1.0e-3
   scheduler: cosine
   batch_size: 32
   epochs: 200
   precision: 16-mixed
   num_workers: 4
-  early_stopping_patience: 30
-  dropout: 0.5
+  early_stopping_patience: 40
+  dropout: 0.3
   label_smoothing: 0.05
 
 logging:

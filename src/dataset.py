@@ -125,24 +125,42 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
+class SaturationEmphasis:
+    """Replace each RGB image with a 3-channel saturation map.
+
+    Why: this dataset randomises the colour of every glyph, so a model trained
+    on raw RGB tends to memorise (pixel, hue) -> char mappings on the 400 train
+    samples and fail on validation. The HSV saturation channel separates the
+    pastel background (low S) from the colourful glyphs (high S) regardless of
+    the specific glyph hue, forcing the network to learn shape features.
+    """
+
+    def __call__(self, img: Image.Image) -> Image.Image:
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        _, s, _ = img.convert("HSV").split()
+        return Image.merge("RGB", (s, s, s))
+
+
 def build_train_transform(cfg) -> T.Compose:
     a = cfg["augment"]
     h, w = cfg["image"]["height"], cfg["image"]["width"]
     return T.Compose(
         [
+            SaturationEmphasis(),
             T.Resize((h, w)),
             T.RandomAffine(
                 degrees=a["rotation_degrees"],
                 translate=(a["translate"], a["translate"]),
                 scale=(a["scale_min"], a["scale_max"]),
                 shear=a["shear"],
-                fill=255,
+                fill=0,
             ),
             T.ColorJitter(
                 brightness=a["brightness"],
                 contrast=a["contrast"],
-                saturation=a["saturation"],
-                hue=a["hue"],
+                saturation=0,
+                hue=0,
             ),
             T.ToTensor(),
             T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
@@ -159,6 +177,7 @@ def build_eval_transform(cfg) -> T.Compose:
     h, w = cfg["image"]["height"], cfg["image"]["width"]
     return T.Compose(
         [
+            SaturationEmphasis(),
             T.Resize((h, w)),
             T.ToTensor(),
             T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
