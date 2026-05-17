@@ -1,0 +1,50 @@
+# Default configuration for captcha-map-solver
+# Hardware target: NVIDIA RTX 3060 8GB VRAM (CUDA 12.8+), i5-12400F, 16GB RAM
+
+data:
+  data_dir: data
+  metadata: data/metadata.csv
+  splits_file: configs/splits.json
+  train_size: 400
+  val_size: 50
+  test_size: 50
+  seed: 42
+
+image:
+  height: 128
+  width: 128
+  alphabet: "3479ACDEFHJKLMNPQRTUVWXY"
+  char_len: 5
+
+augment:
+  # tinh chinh theo research.md - moi ky tu mot mau, hue jitter phai nhe
+  rotation_degrees: 5
+  translate: 0.05
+  scale_min: 0.90
+  scale_max: 1.10
+  shear: 3
+  brightness: 0.15
+  contrast: 0.15
+  saturation: 0.20
+  hue: 0.03
+  random_erasing_prob: 0.25
+  random_erasing_scale_min: 0.02
+  random_erasing_scale_max: 0.10
+
+solver:
+  backbone: resnet18      # resnet18 | resnet34 | conv
+  pretrained: true        # use ImageNet weights for resnet
+  optimizer: adamw
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  scheduler: cosine       # cosine | onecycle | none
+  batch_size: 32
+  epochs: 100
+  precision: 16-mixed     # 32 | 16-mixed | bf16-mixed
+  num_workers: 4
+  early_stopping_patience: 15
+
+logging:
+  log_dir: tb_logs
+  ckpt_dir: checkpoints
+  exp_name: baseline-resnet18
