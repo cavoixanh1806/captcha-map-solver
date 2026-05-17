@@ -17,32 +17,35 @@ image:
   char_len: 5
 
 augment:
-  # tinh chinh theo research.md - moi ky tu mot mau, hue jitter phai nhe
-  rotation_degrees: 5
-  translate: 0.05
-  scale_min: 0.90
-  scale_max: 1.10
-  shear: 3
-  brightness: 0.15
-  contrast: 0.15
-  saturation: 0.20
-  hue: 0.03
-  random_erasing_prob: 0.25
+  # Aggressive augmentation: 400 mau qua nho, model du sung memorize.
+  # Moi ky tu mot mau ngau nhien => co the jitter hue manh hon de buoc model hoc shape.
+  rotation_degrees: 12
+  translate: 0.08
+  scale_min: 0.80
+  scale_max: 1.20
+  shear: 8
+  brightness: 0.30
+  contrast: 0.30
+  saturation: 0.30
+  hue: 0.15
+  random_erasing_prob: 0.50
   random_erasing_scale_min: 0.02
-  random_erasing_scale_max: 0.10
+  random_erasing_scale_max: 0.20
 
 solver:
-  backbone: resnet18      # resnet18 | resnet34 | conv
-  pretrained: true        # use ImageNet weights for resnet
+  backbone: conv          # conv (~5M) | resnet18 (~11M) | resnet34 (~21M)
+  pretrained: false       # ImageNet prior khong giup tren captcha noisy + colorful
   optimizer: adamw
-  lr: 3.0e-4
-  weight_decay: 1.0e-4
-  scheduler: cosine       # cosine | onecycle | none
+  lr: 1.0e-3
+  weight_decay: 5.0e-3    # weight decay lon de chong overfit
+  scheduler: cosine
   batch_size: 32
-  epochs: 100
-  precision: 16-mixed     # 32 | 16-mixed | bf16-mixed
+  epochs: 200
+  precision: 16-mixed
   num_workers: 4
-  early_stopping_patience: 15
+  early_stopping_patience: 30
+  dropout: 0.5
+  label_smoothing: 0.05
 
 logging:
   log_dir: tb_logs

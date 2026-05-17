@@ -47,12 +47,15 @@ class ConvMultiHead(nn.Module):
     map flattened into 5 heads of CLASS_NUM logits each.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, dropout: float = 0.3) -> None:
         super().__init__()
 
         def block(in_c: int, out_c: int) -> nn.Sequential:
             return nn.Sequential(
                 nn.Conv2d(in_c, out_c, 3, padding=1),
+                nn.BatchNorm2d(out_c),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_c, out_c, 3, padding=1),
                 nn.BatchNorm2d(out_c),
                 nn.ReLU(inplace=True),
                 nn.MaxPool2d(2, 2),
@@ -63,14 +66,18 @@ class ConvMultiHead(nn.Module):
             block(32, 64),   # 64 -> 32
             block(64, 128),  # 32 -> 16
             block(128, 256), # 16 -> 8
-            block(256, 256), # 8  -> 4
+            nn.Conv2d(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(1),  # global pool -> 256
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256 * 4 * 4, 1024),
+            nn.Dropout(dropout),
+            nn.Linear(256, 512),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.3),
-            nn.Linear(1024, CHAR_LEN * CLASS_NUM),
+            nn.Dropout(dropout),
+            nn.Linear(512, CHAR_LEN * CLASS_NUM),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -81,10 +88,11 @@ class ConvMultiHead(nn.Module):
 
 def build_backbone(cfg) -> nn.Module:
     name = cfg["solver"]["backbone"].lower()
+    dropout = cfg["solver"].get("dropout", 0.3)
     if name in {"resnet18", "resnet34"}:
         return ResnetMultiHead(name, pretrained=cfg["solver"]["pretrained"])
     if name == "conv":
-        return ConvMultiHead()
+        return ConvMultiHead(dropout=dropout)
     raise ValueError(f"unknown backbone: {name}")
 
 
@@ -117,7 +125,11 @@ class CaptchaModel(pl.LightningModule):
     def _step(self, batch):
         x, y = batch
         logits = self(x)
-        loss = sum(F.cross_entropy(logits[:, i, :], y[:, i]) for i in range(CHAR_LEN)) / CHAR_LEN
+        ls = self.cfg["solver"].get("label_smoothing", 0.0)
+        loss = sum(
+            F.cross_entropy(logits[:, i, :], y[:, i], label_smoothing=ls)
+            for i in range(CHAR_LEN)
+        ) / CHAR_LEN
         return loss, logits, y
 
     def training_step(self, batch, batch_idx):
