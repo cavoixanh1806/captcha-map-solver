@@ -34,11 +34,11 @@ solver:
   optimizer: adamw
   lr: 3.0e-5             # base needs lower LR than small
   weight_decay: 0.01
-  warmup_steps: 100
+  warmup_steps: 50       # match run #7
   scheduler: cosine
   batch_size: 4          # fp16 batch=4 fits 8GB; raise if you have headroom
   grad_accumulation: 8   # effective batch = 32
-  epochs: 30
+  epochs: 40             # match run #7
   precision: 16-mixed
   num_workers: 2
   early_stopping_patience: 8
