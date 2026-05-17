@@ -1,0 +1,53 @@
+# TrOCR base (~334M params) fine-tuning configuration.
+#
+# Why try base before synthetic data:
+# - trocr-small (61M) hit 0.656 char_acc / 0.10 seq_acc -> the model was
+#   reading shapes correctly but its decoder couldn't disambiguate edge
+#   cases. base has 5.5x more capacity and a deeper text decoder, which
+#   often closes that gap on small fine-tuning sets.
+# - tomofi/trocr-captcha (CER 0.0019) was fine-tuned from trocr-base.
+#
+# VRAM budget on RTX 3060 8GB:
+# - 334M params x fp16 ~ 0.7 GB weights
+# - Adam optimizer state ~ 2x weights at fp32 -> 2.7 GB
+# - Activations dominate at 384x384 input. Batch 4 + grad_accum 8 = effective
+#   batch 32 fits comfortably under 8 GB at 16-mixed precision.
+# - If OOM: drop batch_size to 2 (still works), or use AdamW8bit if
+#   bitsandbytes is available.
+
+data:
+  data_dir: data
+  metadata: data/metadata.csv
+  splits_file: configs/splits.json
+  train_size: 400
+  val_size: 50
+  test_size: 50
+  seed: 42
+
+image:
+  alphabet: "3479ACDEFHJKLMNPQRTUVWXY"
+  char_len: 5
+
+solver:
+  task: trocr
+  pretrained_model: microsoft/trocr-base-printed
+  optimizer: adamw
+  lr: 3.0e-5             # base needs lower LR than small
+  weight_decay: 0.01
+  warmup_steps: 100
+  scheduler: cosine
+  batch_size: 4          # fp16 batch=4 fits 8GB; raise if you have headroom
+  grad_accumulation: 8   # effective batch = 32
+  epochs: 30
+  precision: 16-mixed
+  num_workers: 2
+  early_stopping_patience: 8
+  num_beams: 8
+  max_length: 16
+  repetition_penalty: 1.3
+  constrained_decoding: false
+
+logging:
+  log_dir: tb_logs
+  ckpt_dir: checkpoints
+  exp_name: trocr-base
