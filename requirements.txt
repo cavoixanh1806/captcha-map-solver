@@ -6,6 +6,8 @@
 # The packages below are installed AFTER torch & torchvision.
 pytorch-lightning>=2.2,<3.0
 torchmetrics>=1.4
+transformers>=4.40
+sentencepiece>=0.2
 numpy>=1.26
 pandas>=2.0
 pillow>=10.0

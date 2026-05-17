@@ -25,7 +25,20 @@ def build_model(cfg):
         from src.crnn import CTCCaptchaModel
 
         return CTCCaptchaModel(cfg)
+    if task == "trocr":
+        from src.trocr import TrOCRLitModel
+
+        return TrOCRLitModel(cfg)
     return CaptchaModel(cfg)
+
+
+def build_datamodule(cfg, model):
+    task = cfg["solver"].get("task", "head").lower()
+    if task == "trocr":
+        from src.trocr import TrOCRDataModule
+
+        return TrOCRDataModule(cfg, model.processor)
+    return CaptchaDataModule(cfg)
 
 
 def main() -> None:
@@ -44,8 +57,8 @@ def main() -> None:
 
     pl.seed_everything(cfg["data"]["seed"], workers=True)
 
-    dm = CaptchaDataModule(cfg)
     model = build_model(cfg)
+    dm = build_datamodule(cfg, model)
 
     ckpt_dir = Path(cfg["logging"]["ckpt_dir"]) / cfg["logging"]["exp_name"]
     ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +92,7 @@ def main() -> None:
         logger=logger,
         log_every_n_steps=10,
         deterministic=False,
+        accumulate_grad_batches=cfg["solver"].get("grad_accumulation", 1),
     )
 
     trainer.fit(model, datamodule=dm, ckpt_path=args.resume)

@@ -126,9 +126,14 @@ In ra: bbox text, hash trùng pixel, foreground HSV, edge density.
 
 ## Lộ trình nâng cấp (theo `research.md`)
 
-1. **Cấp 1 — đã triển khai trong repo này**: Multi-head CNN (ResNet-18), mục tiêu ≥90% seq acc.
-2. **Cấp 2**: CRNN + CTC (chuyển sang `keras-io/ocr-for-captcha` hoặc tự viết).
-3. **Cấp 3**: Fine-tune TrOCR (`anuashok/ocr-captcha-v3`) để đạt 99%+.
+1. **Tier 1 — Multi-head CNN**: `python train.py --config configs/default.yaml`
+   - Backbone resnet18 / conv. Train nhanh nhưng dễ overfit trên 400 mẫu.
+2. **Tier 2 — CRNN + CTC**: `python train.py --config configs/crnn.yaml`
+   - Học theo trục thời gian, ít memorize hơn.
+3. **Tier 3 — Fine-tune TrOCR (KHUYẾN NGHỊ)**: `python train.py --config configs/trocr.yaml`
+   - Pretrained encoder mang sẵn shape prior, fit tốt với 400 mẫu.
+   - Thêm `pip install transformers sentencepiece` (đã có trong `requirements.txt`).
+   - Predict: `python predict.py --ckpt checkpoints/trocr-small/last.ckpt --image data/map_00000.png --task trocr --config configs/trocr.yaml`
 
 ## License
 

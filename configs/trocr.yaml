@@ -1,0 +1,45 @@
+# TrOCR fine-tuning configuration.
+#
+# Why TrOCR for this dataset:
+# - 500 samples is too small to train any CNN/CRNN from scratch when each glyph
+#   has a random colour, the background is textured, and characters overlap.
+# - TrOCR is an encoder-decoder pretrained on millions of printed/handwritten
+#   text images. It already knows what letters look like; we only need to
+#   adapt it to this specific captcha style.
+# - microsoft/trocr-small-printed is ~61M params and fits comfortably on an
+#   RTX 3060 8GB at fp16. The base/large variants need 12+GB.
+
+data:
+  data_dir: data
+  metadata: data/metadata.csv
+  splits_file: configs/splits.json
+  train_size: 400
+  val_size: 50
+  test_size: 50
+  seed: 42
+
+image:
+  alphabet: "3479ACDEFHJKLMNPQRTUVWXY"
+  char_len: 5
+  # TrOCRProcessor handles the resize + normalisation internally.
+
+solver:
+  pretrained_model: microsoft/trocr-small-printed
+  optimizer: adamw
+  lr: 5.0e-5
+  weight_decay: 0.01
+  warmup_steps: 50
+  scheduler: cosine
+  batch_size: 8           # 8 fits RTX 3060 8GB at fp16 with the small model
+  grad_accumulation: 2    # effective batch = 16
+  epochs: 30
+  precision: 16-mixed
+  num_workers: 2
+  early_stopping_patience: 8
+  num_beams: 4
+  max_length: 6           # 5 chars + EOS
+
+logging:
+  log_dir: tb_logs
+  ckpt_dir: checkpoints
+  exp_name: trocr-small
