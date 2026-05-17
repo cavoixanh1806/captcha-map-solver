@@ -56,8 +56,8 @@ class TrOCRDataset(Dataset):
 
             self.aug = T.Compose(
                 [
-                    T.RandomAffine(degrees=10, translate=(0.06, 0.06), scale=(0.85, 1.15), shear=5, fill=255),
-                    T.ColorJitter(brightness=0.20, contrast=0.20, saturation=0.15, hue=0.03),
+                    T.RandomAffine(degrees=6, translate=(0.04, 0.04), scale=(0.92, 1.08), shear=3, fill=255),
+                    T.ColorJitter(brightness=0.15, contrast=0.15),
                 ]
             )
         else:
@@ -174,22 +174,17 @@ class TrOCRLitModel(pl.LightningModule):
         gc.early_stopping = True
         gc.no_repeat_ngram_size = 0
         gc.length_penalty = 1.0
+        gc.repetition_penalty = cfg["solver"].get("repetition_penalty", 1.0)
         # We DO NOT set bos_token_id: TrOCR uses decoder_start_token_id only.
 
-        # Precompute alphabet token IDs for constrained decoding.
-        # If every alphabet char tokenises to a single id we can force the
-        # decoder to only emit those ids at character positions (and EOS at
-        # the final position). This typically lifts sequence accuracy a lot
-        # because the model occasionally emits frequent BPE pieces ("the",
-        # punctuation, etc.) with non-trivial probability.
+        # Precompute alphabet token IDs for constrained decoding (optional).
+        # WARNING: a BPE tokenizer can merge adjacent characters into single
+        # pieces (e.g. "4TCYW" might tokenise to ["4T", "CY", "W"]). In that
+        # case forcing exactly CHAR_LEN single-char tokens during generation
+        # is inconsistent with the training distribution and HURTS accuracy.
+        # We keep the helper so the user can experiment, but the default
+        # config keeps `constrained_decoding: false`.
         self._alphabet_token_ids = self._build_alphabet_token_ids()
-        if (
-            cfg["solver"].get("constrained_decoding", False)
-            and self._alphabet_token_ids is None
-        ):
-            print("[trocr] constrained decoding requested but disabled: "
-                  "tokenizer splits one or more captcha chars into multiple BPE pieces")
-
         self._sample_logged = False
 
     def _build_alphabet_token_ids(self) -> List[int] | None:
