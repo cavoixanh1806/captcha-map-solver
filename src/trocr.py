@@ -56,8 +56,8 @@ class TrOCRDataset(Dataset):
 
             self.aug = T.Compose(
                 [
-                    T.RandomAffine(degrees=6, translate=(0.04, 0.04), scale=(0.92, 1.08), shear=3, fill=255),
-                    T.ColorJitter(brightness=0.15, contrast=0.15),
+                    T.RandomAffine(degrees=10, translate=(0.06, 0.06), scale=(0.85, 1.15), shear=5, fill=255),
+                    T.ColorJitter(brightness=0.20, contrast=0.20, saturation=0.15, hue=0.03),
                 ]
             )
         else:
@@ -176,7 +176,43 @@ class TrOCRLitModel(pl.LightningModule):
         gc.length_penalty = 1.0
         # We DO NOT set bos_token_id: TrOCR uses decoder_start_token_id only.
 
+        # Precompute alphabet token IDs for constrained decoding.
+        # If every alphabet char tokenises to a single id we can force the
+        # decoder to only emit those ids at character positions (and EOS at
+        # the final position). This typically lifts sequence accuracy a lot
+        # because the model occasionally emits frequent BPE pieces ("the",
+        # punctuation, etc.) with non-trivial probability.
+        self._alphabet_token_ids = self._build_alphabet_token_ids()
+        if (
+            cfg["solver"].get("constrained_decoding", False)
+            and self._alphabet_token_ids is None
+        ):
+            print("[trocr] constrained decoding requested but disabled: "
+                  "tokenizer splits one or more captcha chars into multiple BPE pieces")
+
         self._sample_logged = False
+
+    def _build_alphabet_token_ids(self) -> List[int] | None:
+        tok = self.processor.tokenizer
+        ids: List[int] = []
+        for ch in ALPHABET:
+            piece = tok(ch, add_special_tokens=False).input_ids
+            if len(piece) != 1:
+                return None
+            ids.append(piece[0])
+        return ids
+
+    def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids):
+        # input_ids is a 1-D LongTensor of tokens already generated for this
+        # beam, including the decoder_start token at position 0. We need to
+        # constrain positions 1..CHAR_LEN to alphabet, position CHAR_LEN+1
+        # to EOS, then PAD afterwards.
+        pos = int(input_ids.shape[-1])  # number of tokens emitted so far
+        if pos <= CHAR_LEN:
+            return self._alphabet_token_ids
+        if pos == CHAR_LEN + 1:
+            return [self.processor.tokenizer.sep_token_id]
+        return [self.processor.tokenizer.pad_token_id]
 
     # ------------------------------------------------------------------
     # Steps
@@ -188,7 +224,12 @@ class TrOCRLitModel(pl.LightningModule):
         return out.loss
 
     def _generate_decode(self, pixel_values: torch.Tensor) -> List[str]:
-        gen = self.model.generate(pixel_values)
+        kwargs = {}
+        if self._alphabet_token_ids is not None and self.cfg["solver"].get(
+            "constrained_decoding", False
+        ):
+            kwargs["prefix_allowed_tokens_fn"] = self._prefix_allowed_tokens_fn
+        gen = self.model.generate(pixel_values, **kwargs)
         decoded = self.processor.batch_decode(gen, skip_special_tokens=True)
         # Captcha labels are uppercase A-Z + digits; strip whitespace and uppercase
         return [d.replace(" ", "").upper() for d in decoded]

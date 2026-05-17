@@ -27,18 +27,19 @@ solver:
   task: trocr
   pretrained_model: microsoft/trocr-small-printed
   optimizer: adamw
-  lr: 5.0e-5
+  lr: 3.0e-5
   weight_decay: 0.01
-  warmup_steps: 50
+  warmup_steps: 100
   scheduler: cosine
   batch_size: 8           # 8 fits RTX 3060 8GB at fp16 with the small model
   grad_accumulation: 2    # effective batch = 16
-  epochs: 30
+  epochs: 60
   precision: 16-mixed
   num_workers: 2
-  early_stopping_patience: 8
+  early_stopping_patience: 15
   num_beams: 4
   max_length: 16          # CLS + 5 chars (BPE may split, max ~10) + SEP -> 16 is safe
+  constrained_decoding: true   # restrict generation to the 24-symbol alphabet
 
 logging:
   log_dir: tb_logs
