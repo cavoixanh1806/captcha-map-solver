@@ -20,6 +20,18 @@ def predict(ckpt: str, image: str, config: str, task: str) -> str:
     cfg = load_config(config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    if task == "encoder_clf":
+        from src.encoder_clf import EncoderClf
+
+        model = EncoderClf.load_from_checkpoint(ckpt)
+        model.eval().to(device)
+        img = Image.open(image).convert("RGB")
+        pixel_values = model.processor(images=img, return_tensors="pt").pixel_values.to(device)
+        with torch.no_grad():
+            logits = model(pixel_values)
+        pred = logits.argmax(dim=-1).squeeze(0).cpu().tolist()
+        return lst_to_str(pred)
+
     if task == "trocr":
         from src.trocr import TrOCRLitModel
 
@@ -60,7 +72,7 @@ def main() -> None:
     parser.add_argument("--ckpt", required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--config", default="configs/default.yaml")
-    parser.add_argument("--task", default="head", choices=["head", "ctc", "trocr"])
+    parser.add_argument("--task", default="head", choices=["head", "ctc", "trocr", "encoder_clf"])
     args = parser.parse_args()
     text = predict(args.ckpt, args.image, args.config, args.task)
     print(text)

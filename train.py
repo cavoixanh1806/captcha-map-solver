@@ -29,6 +29,10 @@ def build_model(cfg):
         from src.trocr import TrOCRLitModel
 
         return TrOCRLitModel(cfg)
+    if task == "encoder_clf":
+        from src.encoder_clf import EncoderClf
+
+        return EncoderClf(cfg)
     return CaptchaModel(cfg)
 
 
@@ -38,6 +42,10 @@ def build_datamodule(cfg, model):
         from src.trocr import TrOCRDataModule
 
         return TrOCRDataModule(cfg, model.processor)
+    if task == "encoder_clf":
+        from src.encoder_clf import EncoderClfDataModule
+
+        return EncoderClfDataModule(cfg, model.processor)
     return CaptchaDataModule(cfg)
 
 

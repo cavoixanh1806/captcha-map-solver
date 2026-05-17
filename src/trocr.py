@@ -73,13 +73,8 @@ class TrOCRDataset(Dataset):
             img = self.aug(img)
 
         pixel_values = self.processor(images=img, return_tensors="pt").pixel_values[0]
-        # CRITICAL: BPE merges adjacent letters (e.g. "TN" -> single token).
-        # Inserting spaces forces every captcha char to tokenise to a single
-        # "_<char>" token, giving a fixed-length token sequence the decoder
-        # can learn reliably.
-        spaced = " ".join(text)
         labels = self.processor.tokenizer(
-            spaced,
+            text,
             padding="max_length",
             max_length=self.max_length,
             truncation=True,
