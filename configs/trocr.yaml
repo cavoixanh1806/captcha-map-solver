@@ -24,6 +24,7 @@ image:
   # TrOCRProcessor handles the resize + normalisation internally.
 
 solver:
+  task: trocr
   pretrained_model: microsoft/trocr-small-printed
   optimizer: adamw
   lr: 5.0e-5
