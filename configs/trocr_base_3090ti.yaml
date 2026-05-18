@@ -49,7 +49,7 @@ solver:
   max_length: 16
   repetition_penalty: 1.3
   constrained_decoding: false
-  synth_per_epoch: 2000   # mix 2000 synthetic + 400 real per epoch
+  synth_per_epoch: 0      # set via CLI: python train.py --synth 2000
 
 logging:
   log_dir: tb_logs

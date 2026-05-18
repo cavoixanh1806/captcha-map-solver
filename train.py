@@ -54,11 +54,17 @@ def main() -> None:
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--resume", default=None, help="path to checkpoint to resume from")
     parser.add_argument("--exp-name", default=None, help="override experiment name")
+    parser.add_argument(
+        "--synth", type=int, default=None, metavar="N",
+        help="override solver.synth_per_epoch: mix N synthetic images per epoch"
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     if args.exp_name:
         cfg["logging"]["exp_name"] = args.exp_name
+    if args.synth is not None:
+        cfg["solver"]["synth_per_epoch"] = args.synth
 
     # honour the Tensor Cores hint for RTX 3060+
     torch.set_float32_matmul_precision("high")
