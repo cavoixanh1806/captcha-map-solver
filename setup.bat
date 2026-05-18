@@ -1,44 +1,107 @@
 @echo off
 REM Setup script for Windows (Win10/11) with NVIDIA GPU.
 REM Usage:
-REM   git clone https://github.com/cavoixanh1806/captcha-map-solver.git
-REM   cd captcha-map-solver
-REM   setup.bat
-REM   .venv\Scripts\activate
-REM   python train.py --config configs/trocr_base_3090ti.yaml --synth 2000
+REM   Double-click setup.bat or run it in CMD/PowerShell.
 
-echo === Creating virtual environment ===
-python -m venv .venv
-call .venv\Scripts\activate
-python -m pip install --upgrade pip
+echo ===================================================
+echo === Step 1: Checking System Dependencies ===
+echo ===================================================
+
+REM Check Git
+git --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Git is NOT installed. Attempting to install via winget...
+    winget install --id Git.Git -e --source winget
+    if %errorlevel% equ 0 (
+        echo.
+        echo [SUCCESS] Git installed successfully!
+        echo [WARNING] Please CLOSE this command prompt window, open a NEW one, and run setup.bat again to continue.
+        pause
+        exit /b
+    ) else (
+        echo [ERROR] Failed to install Git via winget. Please download and install Git manually from: https://git-scm.com/
+        pause
+        exit /b
+    )
+) else (
+    echo [OK] Git is already installed.
+)
+
+REM Check Python
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Python is NOT installed. Attempting to install Python 3.11 via winget...
+    winget install --id Python.Python.3.11 -e --source winget
+    if %errorlevel% equ 0 (
+        echo.
+        echo [SUCCESS] Python 3.11 installed successfully!
+        echo [WARNING] Please CLOSE this command prompt window, open a NEW one, and run setup.bat again to continue.
+        pause
+        exit /b
+    ) else (
+        echo [ERROR] Failed to install Python via winget. Please download and install Python 3.11 manually from: https://www.python.org/
+        pause
+        exit /b
+    )
+) else (
+    echo [OK] Python is already installed.
+)
 
 echo.
-echo === Detecting CUDA version ===
-for /f "tokens=*" %%i in ('nvidia-smi ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
-echo %CUDA_LINE%
+echo ===================================================
+echo === Step 2: Creating Virtual Environment ===
+echo ===================================================
+if not exist .venv (
+    echo Creating .venv...
+    python -m venv .venv
+) else (
+    echo Virtual environment (.venv) already exists.
+)
 
 echo.
-echo === Installing PyTorch ===
-echo Check your CUDA version above and pick the right wheel:
-echo   CUDA 12.8+  ->  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-echo   CUDA 12.4   ->  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-echo   CUDA 12.1   ->  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-echo   CUDA 11.8   ->  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-echo.
-echo Running with cu128 (RTX 3090 Ti / RTX 3060 with CUDA 12.8+):
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+echo === Upgrading pip ===
+.venv\Scripts\python -m pip install --upgrade pip
 
 echo.
-echo === Installing project requirements ===
-pip install -r requirements.txt
+echo ===================================================
+echo === Step 3: Detecting CUDA Version ===
+echo ===================================================
+for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
+if "%CUDA_LINE%"=="" (
+    echo [WARNING] NVIDIA GPU/CUDA driver not detected via nvidia-smi.
+    echo Defaulting to CPU/standard install or check your GPU drivers.
+) else (
+    echo Detected: %CUDA_LINE%
+)
 
 echo.
-echo === Setup complete ===
-echo Activate env : .venv\Scripts\activate
+echo ===================================================
+echo === Step 4: Installing PyTorch (CUDA Optimized) ===
+echo ===================================================
+echo Check your CUDA version above. Installing PyTorch with CUDA 12.4 support 
+echo (fully compatible with CUDA 12.1 up to CUDA 12.8+):
+.venv\Scripts\python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+
+echo.
+echo ===================================================
+echo === Step 5: Installing Project Requirements ===
+echo ===================================================
+.venv\Scripts\python -m pip install -r requirements.txt
+
+echo.
+echo ===================================================
+echo === Setup Complete ===
+echo ===================================================
+echo Virtual environment created and fully configured!
+echo.
+echo To activate the virtual environment in CMD:
+echo   .venv\Scripts\activate
 echo.
 echo Train commands:
 echo   RTX 3090 Ti (no synth) : python train.py --config configs/trocr_base_3090ti.yaml
 echo   RTX 3090 Ti (+ synth)  : python train.py --config configs/trocr_base_3090ti.yaml --synth 2000
 echo   RTX 3060    (no synth) : python train.py --config configs/trocr_base.yaml
 echo   RTX 3060    (+ synth)  : python train.py --config configs/trocr_base.yaml --synth 1000
-echo   Resume from checkpoint : python train.py --config configs/trocr_base.yaml --resume checkpoints\trocr-base\best-epoch004.ckpt
+echo   Resume from checkpoint : python train.py --config configs/trocr_base_3090ti.yaml --resume checkpoints\trocr-base-3090ti\best-epochXXX.ckpt
+echo.
+pause

@@ -1,7 +1,7 @@
 # Core deep learning stack — install PyTorch first using the official command
 # matching your CUDA version (https://pytorch.org/get-started/locally/).
-# For RTX 3060 + CUDA 12.8, recommended:
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# For RTX 3060/3090 Ti + CUDA 12.x, recommended:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 #
 # The packages below are installed AFTER torch & torchvision.
 pytorch-lightning>=2.2,<3.0
