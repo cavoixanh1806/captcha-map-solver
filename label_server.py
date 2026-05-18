@@ -160,18 +160,22 @@ class LabelingServer(HTTPServer):
             files = sorted(self.data_dir.glob("map_*.png"))
             
             # Pattern to match: map_00000.png or map_LABEL.png
-            # If it has a 5-letter uppercase alphanumeric label, we consider it already labeled!
-            label_pattern = re.compile(r"^map_([A-Z0-9]{5})\.png$", re.IGNORECASE)
+            # If it consists of digits only (e.g. map_00000.png), it is unlabeled.
+            # Otherwise, if it has a 5-character alphanumeric label (e.g. map_4KTN9.png or map_4KTN9_1.png), it is labeled.
+            label_pattern = re.compile(r"^map_([A-Z0-9]{5})(?:_\d+)?\.png$", re.IGNORECASE)
             number_pattern = re.compile(r"^map_\d+\.png$")
 
             for idx, filepath in enumerate(files):
                 filename = filepath.name
-                match_label = label_pattern.match(filename)
                 
-                if match_label:
-                    text = match_label.group(1).upper()
-                else:
+                if number_pattern.match(filename):
                     text = "" # Unlabeled
+                else:
+                    match_label = label_pattern.match(filename)
+                    if match_label:
+                        text = match_label.group(1).upper()
+                    else:
+                        text = "" # Unlabeled fallback
 
                 rows.append({
                     "index": idx,
