@@ -113,6 +113,7 @@ def main() -> None:
         log_every_n_steps=10,
         deterministic=False,
         accumulate_grad_batches=cfg["solver"].get("grad_accumulation", 1),
+        enable_model_summary=False,
     )
 
     trainer.fit(model, datamodule=dm, ckpt_path=args.resume)
