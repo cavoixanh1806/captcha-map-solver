@@ -541,6 +541,9 @@ HTML_PAGE = """<!DOCTYPE html>
             text-transform: uppercase;
             outline: none;
             transition: all 0.3s;
+            -webkit-text-security: none !important;
+            -moz-text-security: none !important;
+            text-security: none !important;
         }
 
         .input-group input:focus {
@@ -695,7 +698,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 </div>
 
                 <div class="input-group">
-                    <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="off" style="text-transform: uppercase;">
+                    <input type="password" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="new-password" style="text-transform: uppercase;">
                     <button class="btn-submit" onclick="saveLabel()">LƯU</button>
                 </div>
 
