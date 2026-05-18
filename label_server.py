@@ -321,7 +321,8 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         .progress-container {
-            width: 500px;
+            width: 100%;
+            max-width: 600px;
             height: 6px;
             background: rgba(255, 255, 255, 0.05);
             border-radius: 10px;
@@ -386,7 +387,8 @@ HTML_PAGE = """<!DOCTYPE html>
             flex-direction: column;
             align-items: center;
             gap: 25px;
-            width: 500px;
+            width: 100%;
+            max-width: 600px;
         }
 
         .card {
@@ -476,7 +478,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         .image-viewer {
             width: 100%;
-            height: 180px;
+            height: 380px;
             background: #110d24;
             border-radius: 16px;
             display: flex;
@@ -488,12 +490,14 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         .image-viewer img {
-            width: 256px;
-            height: 128px;
+            max-width: 95%;
+            max-height: 95%;
+            width: auto;
+            height: auto;
             image-rendering: pixelated;
             object-fit: contain;
-            border-radius: 4px;
-            filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.2));
+            border-radius: 8px;
+            filter: drop-shadow(0 0 15px rgba(0, 240, 255, 0.25));
             transition: transform 0.2s ease;
         }
         
