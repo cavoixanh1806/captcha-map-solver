@@ -5,6 +5,11 @@ Example:
 """
 from __future__ import annotations
 
+import os
+os.environ["GLOG_minloglevel"] = "2"
+os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
+os.environ["PYTHONWARNINGS"] = "ignore"
+
 import warnings
 warnings.filterwarnings("ignore")
 import logging
@@ -12,7 +17,6 @@ logging.getLogger("torch").setLevel(logging.ERROR)
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 
 import argparse
-import os
 from pathlib import Path
 
 import pytorch_lightning as pl
