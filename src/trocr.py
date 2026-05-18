@@ -64,7 +64,10 @@ class SyntheticTrOCRDataset:
     def __getitem__(self, idx: int):
         from .synth import render
 
-        rng = _rnd.Random(idx * 7919 + 3)
+        # To ensure the model never sees the same synthetic image twice across epochs,
+        # we initialize the RNG using system entropy rather than a static idx-based seed.
+        # This forces the generator to render a fresh, unique CAPTCHA on every epoch.
+        rng = _rnd.Random()
         sample = render(text=None, font_paths=self.fonts, rng=rng)
         img = sample.image  # PIL RGB
 
