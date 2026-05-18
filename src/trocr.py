@@ -1,17 +1,23 @@
 """TrOCR fine-tuning module for the map_*.png CAPTCHA dataset.
 
 This is the strategically-chosen tier-3 path from research.md. We fine-tune
-``microsoft/trocr-small-printed`` (61M params) so the encoder's pretrained
-ViT/DeiT features bring the prior knowledge that the 400-sample training set
+``microsoft/trocr-base-printed`` (334M params) so the encoder's pretrained
+BEiT features bring the prior knowledge that the 400-sample training set
 cannot supply. The decoder is a small autoregressive Transformer; we leave it
 intact and rely on the optimizer to bend it toward the 24-symbol alphabet.
 
 The dataset uses raw RGBA -> RGB conversion (no saturation trick): TrOCR has
 seen colourful real-world images and the saturation hack would actively hurt
 because it removes information the encoder already knows how to use.
+
+Optional synthetic mixing: when ``solver.synth_per_epoch > 0`` the training
+stream is augmented with freshly rendered synthetic captchas (see
+``src/synth.py``) so the model sees thousands of new shape/colour combinations
+per epoch. Val and test splits stay 100% real.
 """
 from __future__ import annotations
 
+import random as _rnd
 from typing import List
 
 import pytorch_lightning as pl
@@ -32,6 +38,48 @@ from .dataset import ALPHABET, CHAR_LEN, build_or_load_splits
 # ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
+class SyntheticTrOCRDataset:
+    """On-the-fly synthetic captcha dataset for TrOCR training.
+
+    Each call to __getitem__ renders a fresh image so the model never sees
+    the same synthetic sample twice across epochs.
+    """
+
+    def __init__(self, length: int, processor: TrOCRProcessor, max_length: int) -> None:
+        from .synth import discover_fonts
+
+        self.length = length
+        self.processor = processor
+        self.max_length = max_length
+        self.fonts = discover_fonts()
+        if not self.fonts:
+            raise RuntimeError(
+                "No TrueType fonts found for synthetic generation. "
+                "Add font paths to src/synth.py DEFAULT_FONT_CANDIDATES."
+            )
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, idx: int):
+        from .synth import render
+
+        rng = _rnd.Random(idx * 7919 + 3)
+        sample = render(text=None, font_paths=self.fonts, rng=rng)
+        img = sample.image  # PIL RGB
+
+        pixel_values = self.processor(images=img, return_tensors="pt").pixel_values[0]
+        labels = self.processor.tokenizer(
+            sample.text,
+            padding="max_length",
+            max_length=self.max_length,
+            truncation=True,
+            return_tensors="pt",
+        ).input_ids[0]
+        labels[labels == self.processor.tokenizer.pad_token_id] = -100
+        return {"pixel_values": pixel_values, "labels": labels, "text": sample.text}
+
+
 class TrOCRDataset(Dataset):
     """Raw RGB images + plain-text labels; processor handles tensor conversion."""
 
@@ -108,9 +156,22 @@ class TrOCRDataModule(pl.LightningDataModule):
             seed=cfg["data"]["seed"],
         )
         max_length = cfg["solver"]["max_length"]
-        self.train_ds = TrOCRDataset(
+        real_train = TrOCRDataset(
             cfg["data"]["data_dir"], cfg["data"]["metadata"], split.train, self.processor, max_length, augment=True
         )
+
+        # Optional synthetic mixing: when solver.synth_per_epoch > 0 we
+        # prepend a SyntheticTrOCRDataset to the real training set so the
+        # model sees fresh shape/colour combinations every epoch.
+        synth_n = int(cfg["solver"].get("synth_per_epoch", 0))
+        if synth_n > 0:
+            from torch.utils.data import ConcatDataset
+
+            synth_ds = SyntheticTrOCRDataset(synth_n, self.processor, max_length)
+            self.train_ds = ConcatDataset([synth_ds, real_train])
+        else:
+            self.train_ds = real_train
+
         self.val_ds = TrOCRDataset(
             cfg["data"]["data_dir"], cfg["data"]["metadata"], split.val, self.processor, max_length, augment=False
         )
