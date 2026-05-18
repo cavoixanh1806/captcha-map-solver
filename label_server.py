@@ -521,11 +521,13 @@ HTML_PAGE = """<!DOCTYPE html>
             display: flex;
             gap: 12px;
             margin-top: 10px;
-            align-items: stretch;
+            height: 58px;
         }
 
         .input-group input {
             flex: 1;
+            min-width: 0;
+            height: 100%;
             font-family: 'Space Grotesk', sans-serif;
             font-size: 1.8rem;
             font-weight: 700;
@@ -533,7 +535,7 @@ HTML_PAGE = """<!DOCTYPE html>
             border: 2px solid var(--glass-border);
             color: var(--text);
             border-radius: 14px;
-            padding: 12px;
+            padding: 0 12px;
             text-align: center;
             letter-spacing: 6px;
             text-transform: uppercase;
@@ -548,9 +550,10 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         .btn-submit {
+            height: 100%;
             background: linear-gradient(135deg, var(--primary), var(--accent));
             color: var(--bg-color);
-            border: none;
+            border: 2px solid transparent;
             border-radius: 14px;
             font-size: 1.1rem;
             font-weight: 700;
