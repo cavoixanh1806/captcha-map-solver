@@ -677,7 +677,7 @@ HTML_PAGE = """<!DOCTYPE html>
             </div>
 
             <div class="input-group">
-                <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="5" autofocus autocomplete="off" oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+                <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="off" style="text-transform: uppercase;">
                 <button class="btn-submit" onclick="saveLabel()">LƯU</button>
             </div>
 
@@ -702,6 +702,49 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="toast" id="toast">✅ Đã lưu thành công!</div>
 
     <script>
+        // Helper to convert Vietnamese Telex/VNI combined characters back to raw English key sequences
+        function decodeTelex(str) {
+            const mapping = {
+                'á': 'as', 'à': 'af', 'ả': 'ar', 'ã': 'ax', 'ạ': 'aj',
+                'â': 'aa', 'ấ': 'aas', 'ầ': 'aaf', 'ẩ': 'aar', 'ẫ': 'aax', 'ậ': 'aaj',
+                'ă': 'aw', 'ắ': 'aws', 'ằ': 'awf', 'ẳ': 'awr', 'ẵ': 'awx', 'ặ': 'awj',
+                'é': 'es', 'è': 'ef', 'ẻ': 'er', 'ẽ': 'ex', 'ẹ': 'ej',
+                'ê': 'ee', 'ế': 'ees', 'ề': 'eef', 'ể': 'eer', 'ễ': 'eex', 'ệ': 'eej',
+                'í': 'is', 'ì': 'if', 'ỉ': 'ir', 'ĩ': 'ix', 'ị': 'ij',
+                'ó': 'os', 'ò': 'of', 'ỏ': 'or', 'õ': 'ox', 'ọ': 'oj',
+                'ô': 'oo', 'ố': 'oos', 'ồ': 'oof', 'ổ': 'oor', 'ỗ': 'oox', 'ộ': 'ooj',
+                'ơ': 'ow', 'ớ': 'ows', 'ờ': 'owf', 'ở': 'owr', 'ỡ': 'owx', 'ợ': 'owj',
+                'ú': 'us', 'ù': 'uf', 'ủ': 'ur', 'ũ': 'ux', 'ụ': 'uj',
+                'ư': 'uw', 'ứ': 'uws', 'ừ': 'uwf', 'ử': 'uwr', 'ữ': 'uwx', 'ự': 'uwj',
+                'ý': 'ys', 'ỳ': 'yf', 'ỷ': 'yr', 'ỹ': 'yx', 'ỵ': 'yj',
+                'đ': 'dd',
+                'Á': 'AS', 'À': 'AF', 'Ả': 'AR', 'Ã': 'AX', 'Ạ': 'AJ',
+                'Â': 'AA', 'Ấ': 'AAS', 'Ầ': 'AAF', 'Ẩ': 'AAR', 'Ẫ': 'AAX', 'Ậ': 'AAJ',
+                'Ă': 'AW', 'Ắ': 'AWS', 'Ằ': 'AWF', 'Ẳ': 'AWR', 'Ẵ': 'AWX', 'Ặ': 'AWJ',
+                'É': 'ES', 'È': 'EF', 'Ẻ': 'ER', 'Ẽ': 'EX', 'Ẹ': 'EJ',
+                'Ê': 'EE', 'Ế': 'EES', 'Ề': 'EEF', 'Ể': 'EER', 'Ễ': 'EEX', 'Ệ': 'EEJ',
+                'Í': 'IS', 'Ì': 'IF', 'Ỉ': 'IR', 'Ĩ': 'IX', 'Ị': 'IJ',
+                'Ó': 'OS', 'Ò': 'OF', 'Ỏ': 'OR', 'Õ': 'OX', 'Ọ': 'OJ',
+                'Ô': 'OO', 'Ố': 'OOS', 'Ồ': 'OOF', 'Ổ': 'OOR', 'Ỗ': 'OOX', 'Ộ': 'OOJ',
+                'Ơ': 'OW', 'Ớ': 'OWS', 'Ờ': 'OWF', 'Ở': 'OWR', 'Ỡ': 'OWX', 'Ợ': 'OWJ',
+                'Ú': 'US', 'Ù': 'UF', 'Ủ': 'UR', 'Ũ': 'UX', 'Ụ': 'UJ',
+                'Ư': 'UW', 'Ứ': 'UWS', 'Ừ': 'UWF', 'Ử': 'UWR', 'Ữ': 'UWX', 'Ự': 'UWJ',
+                'Ý': 'YS', 'Ỳ': 'YF', 'Ỷ': 'YR', 'Ỹ': 'YX', 'Ỵ': 'YJ',
+                'Đ': 'DD'
+            };
+            
+            let result = '';
+            for (let i = 0; i < str.length; i++) {
+                const char = str[i];
+                if (mapping[char]) {
+                    result += mapping[char];
+                } else {
+                    result += char;
+                }
+            }
+            return result;
+        }
+
         let metadata = [];
         let filteredIndices = [];
         let currentFilterIdx = 0;
@@ -793,7 +836,9 @@ HTML_PAGE = """<!DOCTYPE html>
             const idx = filteredIndices[currentFilterIdx];
             const item = metadata[idx];
             const input = document.getElementById('label-input');
-            const text = input.value.trim().toUpperCase();
+            
+            // Decodes any Telex combos first, then cleans up English alphanumeric characters
+            const text = decodeTelex(input.value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
             if (text.length !== 5) {
                 showToastError('❌ Nhãn phải chứa đúng 5 ký tự!');
@@ -900,6 +945,14 @@ HTML_PAGE = """<!DOCTYPE html>
         async function init() {
             await loadConfig();
             await loadMetadata();
+
+            // Auto-clean input on blur (convert Telex/VNI back to plain English)
+            const input = document.getElementById('label-input');
+            if (input) {
+                input.addEventListener('blur', function() {
+                    this.value = decodeTelex(this.value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                });
+            }
         }
         init();
     </script>
