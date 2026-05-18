@@ -5,6 +5,12 @@ Example:
 """
 from __future__ import annotations
 
+import warnings
+warnings.filterwarnings("ignore")
+import logging
+logging.getLogger("torch").setLevel(logging.ERROR)
+logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+
 import argparse
 import os
 from pathlib import Path
