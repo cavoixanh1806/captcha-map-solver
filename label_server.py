@@ -494,10 +494,8 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         .image-viewer img {
-            max-width: 95%;
-            max-height: 95%;
-            width: auto;
-            height: auto;
+            width: 90%;
+            height: 90%;
             image-rendering: pixelated;
             object-fit: contain;
             border-radius: 8px;
