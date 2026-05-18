@@ -266,6 +266,15 @@ HTML_PAGE = """<!DOCTYPE html>
             overflow-x: hidden;
         }
 
+        .app-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
         /* Ambient glowing circles */
         .ambient-glow {
             position: absolute;
@@ -512,6 +521,7 @@ HTML_PAGE = """<!DOCTYPE html>
             display: flex;
             gap: 12px;
             margin-top: 10px;
+            align-items: stretch;
         }
 
         .input-group input {
@@ -544,10 +554,14 @@ HTML_PAGE = """<!DOCTYPE html>
             border-radius: 14px;
             font-size: 1.1rem;
             font-weight: 700;
-            padding: 0 28px;
+            padding: 0 35px;
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 4px 20px rgba(0, 240, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
         }
 
         .btn-submit:hover {
@@ -641,61 +655,63 @@ HTML_PAGE = """<!DOCTYPE html>
 <body>
     <div class="ambient-glow"></div>
 
-    <header>
-        <h1>🏷️ CAPTCHA Labeling Hub</h1>
-        <div id="mode-badge" class="mode-badge">Đang tải cấu hình...</div>
-    </header>
+    <div class="app-container">
+        <header>
+            <h1>🏷️ CAPTCHA Labeling Hub</h1>
+            <div id="mode-badge" class="mode-badge">Đang tải cấu hình...</div>
+        </header>
 
-    <div class="stats-container">
-        <div>Đã gán nhãn: <span id="labeled-count">0</span> / <span id="total-count">0</span></div>
-        <div class="stats-divider"></div>
-        <div>Còn lại: <span id="remaining-count">0</span></div>
-    </div>
+        <div class="stats-container">
+            <div>Đã gán nhãn: <span id="labeled-count">0</span> / <span id="total-count">0</span></div>
+            <div class="stats-divider"></div>
+            <div>Còn lại: <span id="remaining-count">0</span></div>
+        </div>
 
-    <div class="progress-container">
-        <div class="progress-bar" id="progress-bar"></div>
-    </div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
 
-    <div class="filter-buttons">
-        <button id="btn-unlabeled" class="active" onclick="setFilter('unlabeled')">Chưa gán nhãn</button>
-        <button id="btn-all" onclick="setFilter('all')">Tất cả</button>
-        <button id="btn-labeled" onclick="setFilter('labeled')">Đã gán nhãn</button>
-    </div>
+        <div class="filter-buttons">
+            <button id="btn-unlabeled" class="active" onclick="setFilter('unlabeled')">Chưa gán nhãn</button>
+            <button id="btn-all" onclick="setFilter('all')">Tất cả</button>
+            <button id="btn-labeled" onclick="setFilter('labeled')">Đã gán nhãn</button>
+        </div>
 
-    <div class="workspace">
-        <div class="card">
-            <div class="filename-banner">
-                <span id="filename-label" class="filename-text">map_00000.png</span>
-                <div class="jump-box">
-                    <input type="number" id="goto-input" min="1" placeholder="STT...">
-                    <button onclick="gotoImage()">Đi</button>
+        <div class="workspace">
+            <div class="card">
+                <div class="filename-banner">
+                    <span id="filename-label" class="filename-text">map_00000.png</span>
+                    <div class="jump-box">
+                        <input type="number" id="goto-input" min="1" placeholder="STT...">
+                        <button onclick="gotoImage()">Đi</button>
+                    </div>
+                </div>
+
+                <div class="image-viewer">
+                    <img id="captcha-img" src="" alt="Vui lòng gán nhãn">
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="off" style="text-transform: uppercase;">
+                    <button class="btn-submit" onclick="saveLabel()">LƯU</button>
+                </div>
+
+                <div class="navigation">
+                    <button onclick="prevImage()">← Trước</button>
+                    <button onclick="nextImage()">Bỏ qua →</button>
                 </div>
             </div>
 
-            <div class="image-viewer">
-                <img id="captcha-img" src="" alt="Vui lòng gán nhãn">
+            <div class="keyboard-shortcuts">
+                <div><kbd>Enter</kbd> Lưu & Tiếp</div>
+                <div><kbd>←</kbd> Ảnh Trước</div>
+                <div><kbd>→</kbd> Bỏ Qua</div>
+                <div><kbd>Esc</kbd> Xóa Chữ</div>
             </div>
 
-            <div class="input-group">
-                <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="off" style="text-transform: uppercase;">
-                <button class="btn-submit" onclick="saveLabel()">LƯU</button>
+            <div class="info-panel" id="info-panel">
+                Đang tải dữ liệu từ server...
             </div>
-
-            <div class="navigation">
-                <button onclick="prevImage()">← Trước</button>
-                <button onclick="nextImage()">Bỏ qua →</button>
-            </div>
-        </div>
-
-        <div class="keyboard-shortcuts">
-            <div><kbd>Enter</kbd> Lưu & Tiếp</div>
-            <div><kbd>←</kbd> Ảnh Trước</div>
-            <div><kbd>→</kbd> Bỏ Qua</div>
-            <div><kbd>Esc</kbd> Xóa Chữ</div>
-        </div>
-
-        <div class="info-panel" id="info-panel">
-            Đang tải dữ liệu từ server...
         </div>
     </div>
 
