@@ -19,7 +19,7 @@ if not exist ".venv\Scripts\python.exe" (
     echo [SUCCESS] Virtual environment created.
 )
 
-echo [1/2] Activating virtual environment and checking all dependencies (AI & Web)...
+echo [1/2] Activating virtual environment and checking all dependencies...
 :: Automatically verify and install all dependencies (both AI and API libraries) if not already done
 .\.venv\Scripts\python.exe -c "import torch, transformers, pytorch_lightning, fastapi, uvicorn" 2>nul
 if %errorlevel% neq 0 (
