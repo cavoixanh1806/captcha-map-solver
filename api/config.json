@@ -1,5 +1,5 @@
 {
-  "checkpoint_path": "best-epoch052.ckpt",
-  "host": "0.0.0.0",
+  "checkpoint_path": "best-epoch072.ckpt",
+  "host": "127.0.0.1",
   "port": 5000
 }
