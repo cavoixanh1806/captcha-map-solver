@@ -1,0 +1,57 @@
+# TrOCR-base fine-tuning config for RTX 3090 Ti (24 GB VRAM) on Linux/AMD.
+#
+# Key differences vs trocr_base.yaml (RTX 3060 8GB):
+#   - batch_size 4 -> 16  (24GB fits 16 at bf16 easily)
+#   - grad_accumulation 8 -> 2  (effective batch still 32)
+#   - precision 16-mixed -> bf16-mixed  (Ampere native, more stable)
+#   - num_workers 2 -> 8  (Threadripper 32-core, use more workers)
+#   - epochs 60 -> 80  (more budget since each epoch is faster)
+#   - early_stopping_patience 15 -> 20
+#   - synth_per_epoch 2000  (24GB headroom -> mix synthetic to push past 70%)
+#
+# Setup on the rental Linux machine:
+#   git clone https://github.com/cavoixanh1806/captcha-map-solver.git
+#   cd captcha-map-solver
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install --upgrade pip
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#   pip install -r requirements.txt
+#   python train.py --config configs/trocr_base_3090ti.yaml
+
+data:
+  data_dir: data
+  metadata: data/metadata.csv
+  splits_file: configs/splits.json # same split as 3060 run for fair comparison
+  train_size: 646
+  val_size: 50
+  test_size: 50
+  seed: 42
+
+image:
+  alphabet: "3479ACDEFHJKLMNPQRTUVWXY"
+  char_len: 5
+
+solver:
+  task: trocr
+  pretrained_model: microsoft/trocr-base-printed
+  optimizer: adamw
+  lr: 2.0e-5
+  weight_decay: 0.01
+  warmup_steps: 50
+  scheduler: cosine
+  batch_size: 16 # 24GB VRAM handles 16 at bf16 comfortably
+  grad_accumulation: 2 # effective batch = 32 (same as 3060 run)
+  epochs: 80
+  precision: bf16-mixed # Ampere native, more numerically stable than fp16
+  num_workers: 12 # Threadripper 32-core
+  early_stopping_patience: 20
+  num_beams: 8
+  max_length: 16
+  repetition_penalty: 1.3
+  constrained_decoding: false
+  synth_per_epoch: 0 # set via CLI: python train.py --synth 2000
+
+logging:
+  log_dir: tb_logs
+  ckpt_dir: checkpoints
+  exp_name: trocr-base-3090ti
