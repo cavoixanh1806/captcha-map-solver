@@ -64,14 +64,14 @@ echo === Upgrading pip ===
 
 echo.
 echo ===================================================
-echo === Step 3: Detecting CUDA Version ===
+echo === Step 3: Checking NVIDIA GPU / CUDA ===
 echo ===================================================
-for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
-if "%CUDA_LINE%"=="" (
+nvidia-smi >nul 2>&1
+if %errorlevel% neq 0 (
     echo [WARNING] NVIDIA GPU/CUDA driver not detected via nvidia-smi.
     echo Defaulting to CPU/standard install or check your GPU drivers.
 ) else (
-    echo Detected: %CUDA_LINE%
+    echo [OK] NVIDIA GPU/CUDA driver detected successfully!
 )
 
 echo.
