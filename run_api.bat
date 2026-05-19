@@ -9,7 +9,7 @@ echo ===================================================
 :: Check for virtual environment
 if not exist ".venv\Scripts\python.exe" (
     echo [INFO] Virtual environment .venv was not found!
-    echo Creating virtual environment (.venv)...
+    echo Creating virtual environment .venv...
     python -m venv .venv
     if %errorlevel% neq 0 (
         echo [ERROR] Failed to create virtual environment!
