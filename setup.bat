@@ -94,14 +94,13 @@ echo === Setup Complete ===
 echo ===================================================
 echo Virtual environment created and fully configured!
 echo.
-echo To activate the virtual environment in CMD:
-echo   .venv\Scripts\activate
+echo To start training immediately on RTX 3090/3090 Ti (copy and paste):
+echo   .venv\Scripts\python train.py --config configs/trocr_base_3090ti.yaml
 echo.
-echo Train commands:
-echo   RTX 3090 Ti (no synth) : python train.py --config configs/trocr_base_3090ti.yaml
-echo   RTX 3090 Ti (+ synth)  : python train.py --config configs/trocr_base_3090ti.yaml --synth 2000
-echo   RTX 3060    (no synth) : python train.py --config configs/trocr_base.yaml
-echo   RTX 3060    (+ synth)  : python train.py --config configs/trocr_base.yaml --synth 1000
-echo   Resume from checkpoint : python train.py --config configs/trocr_base_3090ti.yaml --resume checkpoints\trocr-base-3090ti\best-epochXXX.ckpt
+echo Train with Synthetic CAPTCHAs (adds 2,000 synthetic images per epoch):
+echo   .venv\Scripts\python train.py --config configs/trocr_base_3090ti.yaml --synth 2000
+echo.
+echo For standard RTX 3060:
+echo   .venv\Scripts\python train.py --config configs/trocr_base.yaml
 echo.
 pause
