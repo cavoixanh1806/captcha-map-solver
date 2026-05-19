@@ -59,7 +59,7 @@ def solve_captcha_via_api(url: str, filepath: str) -> dict:
         
         req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
         
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=60) as response:
             res_data = json.loads(response.read().decode("utf-8"))
             return {
                 "success": res_data.get("success", False),
