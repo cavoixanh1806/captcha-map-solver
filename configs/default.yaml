@@ -5,7 +5,7 @@ data:
   data_dir: data
   metadata: data/metadata.csv
   splits_file: configs/splits.json
-  train_size: 1481
+  train_size: 1489
   val_size: 50
   test_size: 50
   seed: 42
