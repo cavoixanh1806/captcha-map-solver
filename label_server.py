@@ -157,7 +157,7 @@ class LabelingServer(HTTPServer):
         else:
             # Renaming Mode: Scan files dynamically
             rows = []
-            files = sorted(self.data_dir.glob("map_*.png"))
+            files = sorted(self.data_dir.glob("map_*.png"), key=lambda p: p.stat().st_mtime)
             
             # Pattern to match: map_00000.png or map_LABEL.png
             # If it consists of digits only (e.g. map_00000.png), it is unlabeled.
@@ -698,7 +698,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 </div>
 
                 <div class="input-group">
-                    <input type="password" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="new-password" style="text-transform: uppercase;">
+                    <input type="text" id="label-input" placeholder="NHẬP 5 KÝ TỰ" maxlength="10" autofocus autocomplete="new-password" style="text-transform: uppercase;">
                     <button class="btn-submit" onclick="saveLabel()">LƯU</button>
                 </div>
 
