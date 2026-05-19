@@ -8,20 +8,32 @@ echo ===================================================
 
 :: Check for virtual environment
 if not exist ".venv\Scripts\python.exe" (
-    echo [ERROR] Virtual environment .venv was not found!
-    echo Please make sure you are in the correct TrainAI project folder.
-    pause
-    exit /b
+    echo [INFO] Virtual environment .venv was not found!
+    echo Creating virtual environment (.venv)...
+    python -m venv .venv
+    if %errorlevel% neq 0 (
+        echo [ERROR] Failed to create virtual environment!
+        pause
+        exit /b
+    )
+    echo [SUCCESS] Virtual environment created.
 )
 
-echo [1/2] Activating virtual environment and checking dependencies...
-:: Automatically install dependencies if not already done
-.\.venv\Scripts\python.exe -c "import fastapi, uvicorn" 2>nul
+echo [1/2] Activating virtual environment and checking all dependencies (AI & Web)...
+:: Automatically verify and install all dependencies (both AI and API libraries) if not already done
+.\.venv\Scripts\python.exe -c "import torch, transformers, pytorch_lightning, fastapi, uvicorn" 2>nul
 if %errorlevel% neq 0 (
-    echo Dependencies not found. Installing now...
-    .\.venv\Scripts\pip.exe install -r api/requirements.txt
+    echo Core dependencies not found. Installing everything now...
+    
+    echo 1. Installing lightweight PyTorch (CPU optimized)...
+    .\.venv\Scripts\pip.exe install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    
+    echo 2. Installing Transformers, Lightning and API web libraries...
+    .\.venv\Scripts\pip.exe install transformers pytorch-lightning tqdm pillow fastapi uvicorn python-multipart pydantic
+    
+    echo [SUCCESS] All dependencies installed successfully!
 ) else (
-    echo Dependencies already verified.
+    echo [SUCCESS] All dependencies already verified.
 )
 
 echo [2/2] Launching API...
