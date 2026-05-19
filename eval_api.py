@@ -170,7 +170,8 @@ def main():
         # Truncate filename if it's too long for table layout
         disp_name = filename if len(filename) <= 35 else filename[:32] + "..."
         
-        print(f"{idx:<3} | {disp_name:<35} | {true_label:<10} | {pred_label:<10} | {status:<10} | {time_ms:<10.2f}")
+        err_msg = f" ({res['error']})" if res["error"] else ""
+        print(f"{idx:<3} | {disp_name:<35} | {true_label:<10} | {pred_label:<10} | {status:<10}{err_msg} | {time_ms:<10.2f}")
         
     # Print Summary Results
     accuracy = (correct_count / len(eval_set)) * 100
