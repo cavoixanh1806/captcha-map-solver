@@ -100,6 +100,10 @@ def main():
     for pattern in image_patterns:
         image_paths.extend(glob.glob(os.path.join(args.dir, pattern)))
         
+    # Deduplicate paths (Windows is case-insensitive, glob can return duplicates)
+    seen = set()
+    image_paths = [p for p in image_paths if not (p.lower() in seen or seen.add(p.lower()))]
+    
     # Sort files to ensure stable order
     image_paths.sort()
     
@@ -110,6 +114,9 @@ def main():
         print(f"Falling back to '{fallback_dir}/' directory for evaluation...")
         for pattern in image_patterns:
             image_paths.extend(glob.glob(os.path.join(fallback_dir, pattern)))
+            
+        seen = set()
+        image_paths = [p for p in image_paths if not (p.lower() in seen or seen.add(p.lower()))]
         image_paths = [p for p in image_paths if not p.endswith("metadata.csv")]
         image_paths.sort()
         
