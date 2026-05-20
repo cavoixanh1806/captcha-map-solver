@@ -529,12 +529,67 @@ curl -X POST http://192.168.x.x:5000/solve \
 
 ## 12. Xử lý lỗi thường gặp
 
+### ❌ Lỗi: `hf-xet panic` / `rustls-platform-verifier` (LỖI QUAN TRỌNG NHẤT)
+
+```
+thread 'hf-xet-1' panicked at ...rustls-platform-verifier-0.6.2/src/android.rs:94:10:
+Expect rustls-platform-verifier to be initialized
+RuntimeError: Internal error: Join error: task panicked...
+```
+
+**Nguyên nhân:** HuggingFace dùng protocol `hf-xet` (XetHub) để download model — protocol này dùng `rustls` với Android TLS verifier, nhưng **không được khởi tạo trong Termux**.
+
+**Fix A — Đã được fix sẵn trong `mobile_test_ac.py` mới nhất** (chạy `git pull` để cập nhật):
+```bash
+git pull origin main
+python mobile_test_ac.py   # HF_HUB_DISABLE_XET=1 đã được set tự động
+```
+
+**Fix B — Nếu chạy script khác hoặc thủ công:**
+```bash
+# Set biến môi trường trước khi chạy
+HF_HUB_DISABLE_XET=1 python mobile_test_ac.py
+
+# Hoặc export vĩnh viễn trong ~/.bashrc
+echo 'export HF_HUB_DISABLE_XET=1' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Fix C — Upgrade huggingface_hub (phiên bản mới có fix):**
+```bash
+pip install --upgrade huggingface_hub
+```
+
+**Fix D — Dùng base model local (không cần download):**
+```bash
+# Trên máy tính Windows, download base model
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('microsoft/trocr-base-printed', local_dir='./trocr-base-printed')
+"
+
+# Copy sang điện thoại qua USB
+adb push trocr-base-printed/ /sdcard/captcha-solver/trocr-base-printed/
+
+# Trên Termux
+cp -r /sdcard/captcha-solver/trocr-base-printed ~/captcha-solver/
+
+# Chạy với --model_dir (không cần internet, không cần xet)
+python mobile_test_ac.py --model_dir ./trocr-base-printed
+```
+
+> 💡 Sau lần đầu download thành công (Fix A hoặc B), các lần sau tự dùng cache:
+> ```bash
+> python mobile_test_ac.py --offline  # dùng cache, hoàn toàn offline
+> ```
+
 ### ❌ Lỗi: `No module named 'cv2'`
 ```bash
 # opencv-python không hỗ trợ ARM64 trên Termux — cài bản headless
 pip install opencv-python-headless
 # Nếu vẫn lỗi, tắt hoàn toàn opencv trong code (không cần cho inference TrOCR)
 ```
+
 
 ### ❌ Lỗi: `RuntimeError: PytorchStreamReader failed reading zip archive`
 ```

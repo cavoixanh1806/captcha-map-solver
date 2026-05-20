@@ -7,10 +7,16 @@ Tên file trong ac có dạng:  map_XXXXX_<timestamp>_<hash>__cvxxN.png
                              label chính xác nằm đây
 
 Cách dùng:
-  # Test tất cả ảnh trong ac/
+  # Test tất cả ảnh trong ac/ (tự động download base model lần đầu)
   python mobile_test_ac.py
 
-  # Chỉ định thư mục khác
+  # Chạy offline (base model đã có trong cache hoặc --model_dir)
+  python mobile_test_ac.py --offline
+
+  # Dùng base model từ thư mục local (không download)
+  python mobile_test_ac.py --model_dir ./trocr-base-printed
+
+  # Chỉ định thư mục ảnh khác
   python mobile_test_ac.py --ac_dir /sdcard/captcha-solver/ac
 
   # Chỉ định checkpoint
@@ -21,8 +27,18 @@ Cách dùng:
 """
 from __future__ import annotations
 
-import argparse
+# ═══════════════════════════════════════════════════════════════
+# FIX ANDROID/TERMUX: Set env vars TRƯỚC KHI import bất kỳ thứ gì.
+# hf-xet (XetHub download protocol) bị panic trên Android vì
+# rustls-platform-verifier không được khởi tạo trong Termux.
+# Buộc dùng HTTPS thường thay vì XET.
+# ═══════════════════════════════════════════════════════════════
 import os
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")        # tắt xet downloader
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false") # tránh warning fork
+
+import argparse
 import re
 import sys
 import time
@@ -66,25 +82,110 @@ def label_from_filename(filename: str) -> str | None:
 
 
 # ─────────────────────────────────────────────
+# Kiểm tra HF cache có base model chưa
+# ─────────────────────────────────────────────
+def _find_cached_model(model_id: str) -> str | None:
+    """
+    Tìm base model trong HF cache (~/.cache/huggingface/hub/).
+    Trả về đường dẫn nếu tìm thấy, None nếu chưa có.
+    """
+    cache_root = Path(
+        os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")
+    ) / "hub"
+    # HF lưu dạng: models--microsoft--trocr-base-printed/snapshots/<hash>/
+    folder_name = "models--" + model_id.replace("/", "--")
+    snap_dir = cache_root / folder_name / "snapshots"
+    if snap_dir.exists():
+        snaps = sorted(snap_dir.iterdir())
+        if snaps:
+            # Kiểm tra có file model không (safetensors hoặc pytorch_model.bin)
+            snap = snaps[-1]
+            has_model = (
+                any(snap.glob("*.safetensors"))
+                or (snap / "pytorch_model.bin").exists()
+            )
+            if has_model:
+                return str(snap)
+    return None
+
+
+# ─────────────────────────────────────────────
 # Load model (1 lần duy nhất)
 # ─────────────────────────────────────────────
-def load_model(ckpt_path: str):
-    """Load TrOCRLitModel từ checkpoint, map về CPU."""
+def load_model(ckpt_path: str, model_dir: str | None = None, offline: bool = False):
+    """
+    Load TrOCRLitModel từ checkpoint, map về CPU.
+
+    Thứ tự ưu tiên cho base model:
+      1. --model_dir (local path do user chỉ định)
+      2. HF cache nếu đã có (tự động offline)
+      3. Download từ HuggingFace Hub (cần Internet, dùng HTTPS thường)
+    """
     # Thêm thư mục gốc project vào sys.path để import src.*
     project_root = Path(__file__).parent
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
+    BASE_MODEL_ID = "microsoft/trocr-base-printed"
+
+    # ── Xác định nguồn base model ──
+    if model_dir:
+        src = Path(model_dir)
+        if not src.exists():
+            print(c(C.RED, f"❌ --model_dir không tồn tại: {model_dir}"))
+            sys.exit(1)
+        pretrained_src = str(src)
+        print(c(C.CYAN, f"📁 Dùng base model từ: {pretrained_src}"))
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["HF_DATASETS_OFFLINE"] = "1"
+    else:
+        # Thử tìm trong cache
+        cached = _find_cached_model(BASE_MODEL_ID)
+        if cached:
+            pretrained_src = BASE_MODEL_ID  # dùng tên model, cache tự load
+            if offline:
+                os.environ["TRANSFORMERS_OFFLINE"] = "1"
+                os.environ["HF_DATASETS_OFFLINE"] = "1"
+            print(c(C.GREEN, f"✅ Tìm thấy base model trong cache — không cần download"))
+            print(c(C.CYAN,  f"   Cache: {cached}"))
+        else:
+            if offline:
+                print(c(C.RED, "❌ --offline được bật nhưng base model chưa có trong cache."))
+                print(c(C.YELLOW, "   Chạy 1 lần không có --offline để download về cache."))
+                print(c(C.YELLOW, "   Hoặc dùng --model_dir để chỉ đường dẫn local."))
+                sys.exit(1)
+            pretrained_src = BASE_MODEL_ID
+            print(c(C.YELLOW, f"⬇️  Base model chưa có trong cache → download từ HuggingFace"))
+            print(c(C.YELLOW, f"   (~1.3 GB, chỉ lần đầu. Sau đó tự động dùng cache.)"))
+            print(c(C.CYAN,   f"   XET downloader đã TẮT → dùng HTTPS thường (an toàn trên Termux)"))
+
     from src.trocr import TrOCRLitModel  # noqa: E402
 
-    print(c(C.CYAN, f"⏳ Loading model từ: {ckpt_path}"))
+    print(c(C.CYAN, f"\n⏳ Loading checkpoint: {ckpt_path}"))
     print(c(C.YELLOW, "   (lần đầu có thể mất 30–120 giây trên điện thoại…)"))
     t0 = time.time()
+
+    # Monkey-patch cfg để dùng pretrained_src thay vì hardcoded model id
+    # (cần thiết nếu user dùng --model_dir)
+    if model_dir:
+        _orig_init = TrOCRLitModel.__init__
+
+        def _patched_init(self, cfg):
+            cfg = dict(cfg)
+            cfg["solver"] = dict(cfg["solver"])
+            cfg["solver"]["pretrained_model"] = pretrained_src
+            _orig_init(self, cfg)
+
+        TrOCRLitModel.__init__ = _patched_init
 
     model = TrOCRLitModel.load_from_checkpoint(
         ckpt_path,
         map_location="cpu",   # Snapdragon không có CUDA
     )
+
+    if model_dir:
+        TrOCRLitModel.__init__ = _orig_init  # restore
+
     model.eval()
 
     elapsed = time.time() - t0
@@ -139,6 +240,16 @@ def main() -> None:
         help="Thư mục chứa ảnh cần test (mặc định: ./ac)",
     )
     parser.add_argument(
+        "--model_dir",
+        default=None,
+        help="Thư mục chứa base model local (microsoft/trocr-base-printed đã download)",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Chạy offline hoàn toàn (dùng HF cache, không download)",
+    )
+    parser.add_argument(
         "--no_color",
         action="store_true",
         help="Tắt màu ANSI (dùng khi terminal không hỗ trợ)",
@@ -171,7 +282,7 @@ def main() -> None:
         print(c(C.RED, f"❌ Không tìm thấy checkpoint: {ckpt}"))
         sys.exit(1)
 
-    model = load_model(str(ckpt))
+    model = load_model(str(ckpt), model_dir=args.model_dir, offline=args.offline)
 
     # ── Header bảng ──
     col_w = [35, 7, 7, 5, 7]  # file, label, pred, ok, ms
