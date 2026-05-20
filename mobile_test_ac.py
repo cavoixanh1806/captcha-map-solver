@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-Test model TrOCR trên các ảnh trong thư mục `ac/`.
+Test TrOCR trên ảnh trong thư mục ac/ — tối ưu cho Snapdragon 8s Gen 3.
 
-Tên file trong ac có dạng:  map_XXXXX_<timestamp>_<hash>__cvxxN.png
-                                    ^^^^^
-                             label chính xác nằm đây (5 ký tự)
+Tốc độ dự kiến:
+  --beams 1 --threads 4 --int8  →  ~1-2s/ảnh  (khuyến nghị)
+  --beams 8 --threads 4 --int8  →  ~5-6s/ảnh  (chính xác nhất)
+  ONNX int8 (xem mobile_test_ac_onnx.py) → <1s/ảnh (nhanh nhất)
 
 Cách dùng:
-  python mobile_test_ac.py                         # lần đầu: tự download base model
-  python mobile_test_ac.py --offline               # dùng cache, không cần internet
-  python mobile_test_ac.py --model_dir ./trocr-base-printed  # dùng thư mục local
-  python mobile_test_ac.py --ac_dir /sdcard/captcha-solver/ac
-  python mobile_test_ac.py --ckpt best-epoch052.ckpt
-  python mobile_test_ac.py --no_color              # tắt màu ANSI
+  python mobile_test_ac.py                        # mặc định: beams=1, threads=4, int8
+  python mobile_test_ac.py --beams 8              # full accuracy (chậm hơn)
+  python mobile_test_ac.py --no_int8              # tắt quantization
+  python mobile_test_ac.py --threads 8            # dùng tất cả 8 core
+  python mobile_test_ac.py --offline              # không cần internet
+  python mobile_test_ac.py --model_dir ./trocr    # base model local
+  python mobile_test_ac.py --ac_dir /sdcard/ac    # thư mục ảnh khác
+  python mobile_test_ac.py --no_color             # tắt màu ANSI
 """
 from __future__ import annotations
 
 # ═══════════════════════════════════════════════════════════════════════
-# FIX ANDROID/TERMUX — phải set TRƯỚC KHI import bất kỳ thứ gì.
-#
-# hf-xet bị panic trên Android vì rustls-platform-verifier không khởi
-# tạo được trong Termux. Tắt xet → dùng HTTPS thường.
+# FIX ANDROID/TERMUX — set TRƯỚC KHI import bất kỳ thứ gì.
 # ═══════════════════════════════════════════════════════════════════════
 import os
-os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")      # tắt xet → HTTPS thường
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
@@ -33,6 +33,10 @@ import time
 from pathlib import Path
 
 import torch
+
+# ARM/QNNPACK backend — tối ưu INT8 cho Snapdragon/ARM
+torch.backends.quantized.engine = "qnnpack"
+
 from PIL import Image
 
 
@@ -45,6 +49,7 @@ class C:
     YELLOW = "\033[93m"
     CYAN   = "\033[96m"
     BOLD   = "\033[1m"
+    DIM    = "\033[2m"
     RESET  = "\033[0m"
 
 NO_COLOR = False
@@ -54,8 +59,7 @@ def col(color: str, text: str) -> str:
 
 
 # ────────────────────────────────────────────────────────────────────────
-# Trích label từ tên file
-# map_XXXXX_<ts>_<hash>__cvxxN.png → XXXXX
+# Trích label từ tên file:  map_XXXXX_<ts>_<hash>__cvxxN.png → XXXXX
 # ────────────────────────────────────────────────────────────────────────
 _LABEL_RE = re.compile(r"^map_([A-Z0-9]{5})_", re.IGNORECASE)
 
@@ -83,39 +87,29 @@ def _find_cached_model(model_id: str) -> bool:
 # ────────────────────────────────────────────────────────────────────────
 # Key remapping: BEiT cũ (transformers <4.47) → BEiT mới (≥4.47)
 #
-# CŨ: encoder.encoder.layer.N.attention.attention.query.*
-# MỚI: encoder.layers.N.attention.q_proj.*
+# Cũ: encoder.encoder.layer.N.attention.attention.query.*
+# Mới: encoder.layers.N.attention.q_proj.*
 # ────────────────────────────────────────────────────────────────────────
 _REMAP_RULES: list[tuple[str, str]] = [
-    # encoder.encoder.layer.N → encoder.layers.N
-    (r"encoder\.encoder\.layer\.(\d+)\.", r"encoder.layers.\1."),
-    # attention.attention.query/key/value → attention.q_proj/k_proj/v_proj
-    (r"\.attention\.attention\.query\.", ".attention.q_proj."),
-    (r"\.attention\.attention\.key\.",   ".attention.k_proj."),
-    (r"\.attention\.attention\.value\.", ".attention.v_proj."),
-    # attention.output.dense → attention.o_proj
-    (r"\.attention\.output\.dense\.", ".attention.o_proj."),
-    # intermediate.dense → mlp.fc1
-    (r"\.intermediate\.dense\.", ".mlp.fc1."),
-    # layerN.output.dense → layerN.mlp.fc2  (chỉ layer output, không phải pooler)
-    (r"(layers\.\d+)\.output\.dense\.", r"\1.mlp.fc2."),
-    # relative_position_bias (nested → flat)
+    (r"encoder\.encoder\.layer\.(\d+)\.",   r"encoder.layers.\1."),
+    (r"\.attention\.attention\.query\.",     ".attention.q_proj."),
+    (r"\.attention\.attention\.key\.",       ".attention.k_proj."),
+    (r"\.attention\.attention\.value\.",     ".attention.v_proj."),
+    (r"\.attention\.output\.dense\.",        ".attention.o_proj."),
+    (r"\.intermediate\.dense\.",             ".mlp.fc1."),
+    (r"(layers\.\d+)\.output\.dense\.",      r"\1.mlp.fc2."),
     (r"\.attention\.attention\.relative_position_bias_table",
      ".attention.relative_position_bias_table"),
     (r"\.attention\.attention\.relative_position_index",
      ".attention.relative_position_index"),
-    # lambda_1/2 → layer_scale1/2 (BEiT layer scale params)
     (r"\.lambda_1$", ".layer_scale1"),
     (r"\.lambda_2$", ".layer_scale2"),
 ]
 
 def _remap_beit_keys(sd: dict) -> dict:
     """
-    Phát hiện và remap BEiT attention keys nếu checkpoint dùng naming cũ.
-    Trả về state_dict đã remap (hoặc nguyên vẹn nếu không cần).
-
-    Áp dụng TẤT CẢ rules theo thứ tự cho mỗi key (không break sớm).
-    Ví dụ key cần 2 rules:
+    Áp dụng TẤT CẢ remap rules cho từng key (không break sớm).
+    Một key có thể cần nhiều rules liên tiếp:
       encoder.encoder.layer.0.attention.attention.query.weight
       → (rule 1) encoder.layers.0.attention.attention.query.weight
       → (rule 2) encoder.layers.0.attention.q_proj.weight   ✓
@@ -124,20 +118,16 @@ def _remap_beit_keys(sd: dict) -> dict:
         "encoder.encoder.layer." in k or ".attention.attention.query." in k
         for k in sd.keys()
     )
-
     if not needs_remap:
-        return sd  # Đã là format mới
+        return sd
 
-    print(col(C.YELLOW, "⚙️  Phát hiện checkpoint dùng BEiT naming cũ (transformers <4.47)"))
-    print(col(C.YELLOW, "   → Tự động remap keys sang format mới..."))
-
+    print(col(C.YELLOW, "⚙️  BEiT naming cũ (transformers <4.47) → tự động remap..."))
     new_sd: dict = {}
     remapped = 0
     for k, v in sd.items():
         new_k = k
-        # Áp dụng TẤT CẢ rules liên tiếp — KHÔNG break sớm
         for pattern, replacement in _REMAP_RULES:
-            new_k = re.sub(pattern, replacement, new_k)
+            new_k = re.sub(pattern, replacement, new_k)   # TẤT CẢ rules, không break
         if new_k != k:
             remapped += 1
         new_sd[new_k] = v
@@ -146,23 +136,16 @@ def _remap_beit_keys(sd: dict) -> dict:
     return new_sd
 
 
-
 # ────────────────────────────────────────────────────────────────────────
-# Load model — BYPASS PyTorch Lightning hoàn toàn
-#
-# Lý do bypass: load_from_checkpoint gọi __init__ → from_pretrained với
-# version transformers mới (key mới) nhưng checkpoint lưu key cũ → crash.
-# Thay vào đó: load state_dict thủ công + remap + load vào model trực tiếp.
+# Load model — BYPASS PyTorch Lightning, load thẳng VisionEncoderDecoder
 # ────────────────────────────────────────────────────────────────────────
 def load_model(
     ckpt_path: str,
     model_dir: str | None = None,
     offline: bool = False,
+    use_int8: bool = True,
 ):
-    """
-    Trả về (processor, model) đã load fine-tuned weights.
-    Không cần pytorch-lightning, không cần src/.
-    """
+    """Trả về (processor, model). Xử lý BEiT key mismatch tự động."""
     from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
     BASE_MODEL_ID = "microsoft/trocr-base-printed"
@@ -174,103 +157,102 @@ def load_model(
             print(col(C.RED, f"❌ --model_dir không tồn tại: {model_dir}"))
             sys.exit(1)
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
-        print(col(C.CYAN, f"📁 Dùng base model từ local: {pretrained_src}"))
+        print(col(C.CYAN, f"📁 Base model local: {pretrained_src}"))
     else:
         cached = _find_cached_model(BASE_MODEL_ID)
         if cached:
-            print(col(C.GREEN, "✅ Base model có trong cache — không cần download"))
+            print(col(C.GREEN, "✅ Base model có trong cache"))
             if offline:
                 os.environ["TRANSFORMERS_OFFLINE"] = "1"
         else:
             if offline:
                 print(col(C.RED, "❌ --offline nhưng chưa có cache. Chạy lần đầu không --offline."))
                 sys.exit(1)
-            print(col(C.YELLOW, "⬇️  Đang download base model (~1.3 GB, chỉ lần đầu)…"))
-            print(col(C.CYAN,   "   XET đã tắt → dùng HTTPS thường (OK trên Termux)"))
+            print(col(C.YELLOW, "⬇️  Download base model (~1.3GB, chỉ lần đầu)…"))
         pretrained_src = BASE_MODEL_ID
 
-    # ── B1: Load checkpoint state_dict ────────────────────────────────
-    print(col(C.CYAN, f"\n⏳ Đọc checkpoint: {ckpt_path}"))
+    # ── B1: Load checkpoint ────────────────────────────────────────────
+    print(col(C.CYAN, f"⏳ Đọc checkpoint: {ckpt_path}"))
     t0 = time.time()
-
     ckpt_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
-    # Lightning lưu dạng dict với key "state_dict"
     raw_sd: dict = ckpt_data.get("state_dict", ckpt_data)
-
-    # Strip prefix "model." mà Lightning thêm vào (TrOCRLitModel.model = VisionEncoderDecoder)
-    # Bỏ các key không phải weights (optimizer, epoch, ...)
-    non_weight_prefixes = ("optimizer_states", "lr_schedulers", "hparams",
-                           "epoch", "global_step", "pytorch-lightning_version")
+    _skip = ("optimizer_states", "lr_schedulers", "hparams", "epoch",
+             "global_step", "pytorch-lightning_version")
     sd: dict = {}
     for k, v in raw_sd.items():
-        if any(k.startswith(p) for p in non_weight_prefixes):
+        if any(k.startswith(p) for p in _skip):
             continue
-        if k.startswith("model."):
-            sd[k[len("model."):]] = v   # strip "model." prefix
-        else:
-            sd[k] = v
+        sd[k[len("model."):] if k.startswith("model.") else k] = v
 
-    print(col(C.CYAN, f"   {len(sd)} weight tensors trong checkpoint"))
+    print(col(C.DIM, f"   {len(sd)} weight tensors"))
 
-    # ── B2: Remap BEiT keys nếu cần ───────────────────────────────────
+    # ── B2: Remap BEiT keys ────────────────────────────────────────────
     sd = _remap_beit_keys(sd)
 
-    # ── B3: Load processor & model architecture ────────────────────────
-    print(col(C.CYAN, "   Load processor + kiến trúc base model..."))
+    # ── B3: Load base model ────────────────────────────────────────────
+    print(col(C.CYAN, "   Load base model architecture..."))
     processor = TrOCRProcessor.from_pretrained(pretrained_src)
     model     = VisionEncoderDecoderModel.from_pretrained(pretrained_src)
 
-    # Set decoder token IDs (giống src/trocr.py __init__)
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id           = processor.tokenizer.pad_token_id
     model.config.eos_token_id           = processor.tokenizer.sep_token_id
     model.config.vocab_size             = model.config.decoder.vocab_size
 
     # ── B4: Load fine-tuned weights ────────────────────────────────────
-    print(col(C.CYAN, "   Load fine-tuned weights..."))
     result = model.load_state_dict(sd, strict=False)
 
-    # Báo cáo kết quả load
-    # pooler.dense MISSING là bình thường (BEiT pooler không dùng trong TrOCR)
     _ok_missing = {"encoder.pooler.dense.weight", "encoder.pooler.dense.bias"}
     real_missing = [k for k in result.missing_keys if k not in _ok_missing]
-    unexpected   = result.unexpected_keys
 
     if real_missing:
-        print(col(C.RED, f"   ⚠️  {len(real_missing)} keys bị thiếu (fine-tuned weights không load):"))
-        for k in real_missing[:5]:
-            print(col(C.RED, f"      - {k}"))
-        if len(real_missing) > 5:
-            print(col(C.RED, f"      ... và {len(real_missing)-5} keys nữa"))
-        print(col(C.YELLOW, "   → Kết quả có thể kém chính xác hơn."))
+        print(col(C.RED, f"\n{'='*60}"))
+        print(col(C.RED, f"❌ CÒN {len(real_missing)} WEIGHTS CHƯA LOAD ĐƯỢC!"))
+        print(col(C.RED, f"   Encoder đang dùng base weights → KẾT QUẢ SAI!"))
+        print(col(C.YELLOW, f"   → Chạy: git pull origin main  rồi chạy lại"))
+        for k in real_missing[:3]:
+            print(col(C.DIM, f"   missing: {k}"))
+        print(col(C.RED, f"{'='*60}\n"))
     else:
-        print(col(C.GREEN, "   ✅ Tất cả fine-tuned weights load thành công!"))
+        print(col(C.GREEN, "   ✅ Fine-tuned weights: OK"))
 
-    if unexpected:
-        # Unexpected keys thường không ảnh hưởng inference
-        print(col(C.YELLOW, f"   ℹ️  {len(unexpected)} keys thừa trong checkpoint (bỏ qua)"))
+    # ── B5: INT8 Dynamic Quantization ─────────────────────────────────
+    if use_int8:
+        print(col(C.CYAN, "   Quantize INT8 (QNNPACK ARM)..."))
+        t_q = time.time()
+        model = torch.quantization.quantize_dynamic(
+            model,
+            {torch.nn.Linear},
+            dtype=torch.qint8,
+        )
+        print(col(C.GREEN, f"   ✅ INT8 done ({time.time()-t_q:.1f}s) — ~2x faster on ARM NEON"))
 
     model.eval()
     elapsed = time.time() - t0
-    print(col(C.GREEN, f"\n✅ Model sẵn sàng trong {elapsed:.1f}s\n"))
+    print(col(C.GREEN, f"\n✅ Model sẵn sàng ({elapsed:.1f}s)\n"))
     return processor, model
 
 
 # ────────────────────────────────────────────────────────────────────────
 # Inference 1 ảnh
 # ────────────────────────────────────────────────────────────────────────
-def predict_one(processor, model, image_path: str) -> tuple[str, float]:
+def predict_one(
+    processor,
+    model,
+    image_path: str,
+    num_beams: int = 1,
+) -> tuple[str, float]:
     t0 = time.time()
     img = Image.open(image_path).convert("RGB")
     pixel_values = processor(images=img, return_tensors="pt").pixel_values
 
-    with torch.no_grad():
+    with torch.inference_mode():          # nhanh hơn no_grad()
         gen = model.generate(
             pixel_values,
-            num_beams=8,
+            num_beams=num_beams,
             max_length=16,
-            repetition_penalty=1.3,
+            repetition_penalty=1.3 if num_beams > 1 else 1.0,
             decoder_start_token_id=processor.tokenizer.cls_token_id,
             pad_token_id=processor.tokenizer.pad_token_id,
             eos_token_id=processor.tokenizer.sep_token_id,
@@ -288,28 +270,44 @@ def main() -> None:
     global NO_COLOR
 
     parser = argparse.ArgumentParser(
-        description="Test TrOCR model trên ảnh trong thư mục ac/"
+        description="Test TrOCR — tối ưu Snapdragon 8s Gen 3",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--ckpt",      default="best-epoch072.ckpt",
-                        help="Checkpoint .ckpt (mặc định: best-epoch072.ckpt)")
-    parser.add_argument("--ac_dir",    default="ac",
-                        help="Thư mục ảnh test (mặc định: ./ac)")
+    parser.add_argument("--ckpt",      default="best-epoch072.ckpt")
+    parser.add_argument("--ac_dir",    default="ac")
     parser.add_argument("--model_dir", default=None,
-                        help="Base model local (thay vì download HuggingFace)")
-    parser.add_argument("--offline",   action="store_true",
-                        help="Chạy offline, dùng HF cache")
-    parser.add_argument("--no_color",  action="store_true",
-                        help="Tắt màu ANSI")
+                        help="Base model local (không download)")
+    parser.add_argument("--offline",   action="store_true")
+    parser.add_argument("--beams",     type=int, default=1,
+                        help="1=greedy/nhanh nhất | 2=cân bằng | 8=chính xác nhất")
+    parser.add_argument("--threads",   type=int, default=4,
+                        help="Snapdragon 8s Gen3: 4 big cores (X4+A720x3)")
+    parser.add_argument("--no_int8",   action="store_true",
+                        help="Tắt INT8 quantization (dùng float32)")
+    parser.add_argument("--no_color",  action="store_true")
     args = parser.parse_args()
 
     if args.no_color:
         NO_COLOR = True
 
+    # ── Cấu hình threads cho Snapdragon ─────────────────────────────
+    torch.set_num_threads(args.threads)
+    torch.set_num_interop_threads(1)       # tránh overhead context switching
+    print(col(C.BOLD, f"🔧 Snapdragon config: {args.threads} threads | "
+              f"beams={args.beams} | int8={'OFF' if args.no_int8 else 'ON'}"))
+
+    # Ước tính tốc độ
+    est_per_img = {
+        (1, True): 1.5, (1, False): 3,
+        (2, True): 2.5, (2, False): 5,
+        (8, True): 8,   (8, False): 15,
+    }.get((args.beams, not args.no_int8), args.beams * 2)
+    print(col(C.DIM, f"   Ước tính: ~{est_per_img:.0f}s/ảnh\n"))
+
     # ── Tìm ảnh ──────────────────────────────────────────────────────
     ac_dir = Path(args.ac_dir)
     if not ac_dir.exists():
-        print(col(C.RED, f"❌ Không tìm thấy thư mục: {ac_dir}"))
-        print(f"   Truyền đúng đường dẫn: --ac_dir /path/to/ac")
+        print(col(C.RED, f"❌ Không tìm thấy: {ac_dir}"))
         sys.exit(1)
 
     images = sorted(
@@ -317,20 +315,22 @@ def main() -> None:
         if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
     )
     if not images:
-        print(col(C.YELLOW, f"⚠️  Không có ảnh nào trong {ac_dir}"))
+        print(col(C.YELLOW, f"⚠️  Không có ảnh trong {ac_dir}"))
         sys.exit(0)
 
-    # ── Kiểm tra checkpoint ───────────────────────────────────────────
+    print(col(C.CYAN, f"📁 {len(images)} ảnh trong {ac_dir}"))
+
+    # ── Load model ────────────────────────────────────────────────────
     ckpt = Path(args.ckpt)
     if not ckpt.exists():
         print(col(C.RED, f"❌ Không tìm thấy checkpoint: {ckpt}"))
         sys.exit(1)
 
-    # ── Load model ────────────────────────────────────────────────────
     processor, model = load_model(
         str(ckpt),
         model_dir=args.model_dir,
         offline=args.offline,
+        use_int8=not args.no_int8,
     )
 
     # ── Bảng kết quả ─────────────────────────────────────────────────
@@ -352,7 +352,7 @@ def main() -> None:
 
     for img_path in images:
         label = label_from_filename(img_path.name)
-        pred, t = predict_one(processor, model, str(img_path))
+        pred, t = predict_one(processor, model, str(img_path), num_beams=args.beams)
         ms = t * 1000
         total_ms += ms
 
@@ -390,19 +390,24 @@ def main() -> None:
     print(col(C.CYAN, sep))
 
     if total > 0:
-        acc     = correct / total * 100
-        avg_ms  = total_ms / max(1, total + skipped)
-        acc_col = C.GREEN if acc >= 90 else (C.YELLOW if acc >= 70 else C.RED)
+        acc      = correct / total * 100
+        avg_ms   = total_ms / max(1, total + skipped)
+        acc_col  = C.GREEN if acc >= 90 else (C.YELLOW if acc >= 70 else C.RED)
+        fps      = 1000 / avg_ms if avg_ms > 0 else 0
 
         print()
         print(col(C.BOLD, "📊 KẾT QUẢ:"))
-        print(f"  Tổng ảnh có label : {total}")
-        print(f"  Đúng              : {col(C.GREEN, str(correct))}")
-        print(f"  Sai               : {col(C.RED,   str(total - correct))}")
+        print(f"  Tổng ảnh có label  : {total}")
+        print(f"  Đúng               : {col(C.GREEN, str(correct))}")
+        print(f"  Sai                : {col(C.RED,   str(total - correct))}")
         if skipped:
-            print(f"  Không có label    : {col(C.YELLOW, str(skipped))}")
-        print(f"  Accuracy          : {col(acc_col, f'{acc:.1f}%')}")
-        print(f"  Tốc độ TB         : {avg_ms:.0f} ms/ảnh")
+            print(f"  Không có label     : {col(C.YELLOW, str(skipped))}")
+        print(f"  Accuracy           : {col(acc_col, f'{acc:.1f}%')}")
+        print(f"  Tốc độ TB          : {avg_ms:.0f} ms/ảnh  ({fps:.2f} ảnh/s)")
+        print()
+        print(col(C.DIM, f"  Config: beams={args.beams} | threads={args.threads} | "
+              f"int8={'OFF' if args.no_int8 else 'ON'}"))
+        print(col(C.DIM,  "  Để nhanh hơn nữa: python mobile_test_ac_onnx.py (NPU/ONNX)"))
 
         if wrong_list:
             print()
@@ -411,9 +416,7 @@ def main() -> None:
                 print(f"  {fname}")
                 print(f"    Label: {col(C.GREEN, lbl)}  →  Pred: {col(C.RED, p)}")
     else:
-        print(col(C.YELLOW, "⚠️  Không có ảnh nào có label để đánh giá."))
-        if skipped:
-            print(f"   {skipped} ảnh đã predict nhưng không có ground truth.")
+        print(col(C.YELLOW, "⚠️  Không có ảnh nào có label."))
 
 
 if __name__ == "__main__":
