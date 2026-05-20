@@ -14,10 +14,11 @@
 5. [Cài đặt dependencies](#5-cài-đặt-dependencies)
 6. [Chuyển model sang điện thoại](#6-chuyển-model-sang-điện-thoại)
 7. [Clone / copy source code](#7-clone--copy-source-code)
-8. [Chạy inference](#8-chạy-inference)
-9. [Tối ưu để KHÔNG giảm độ chính xác](#9-tối-ưu-để-không-giảm-độ-chính-xác)
-10. [Chạy API server nhẹ trên Termux](#10-chạy-api-server-nhẹ-trên-termux)
-11. [Xử lý lỗi thường gặp](#11-xử-lý-lỗi-thường-gặp)
+8. [Chạy inference 1 ảnh](#8-chạy-inference-1-ảnh)
+9. [🆕 Test batch ảnh thư mục `ac/`](#9-test-batch-ảnh-thư-mục-ac)
+10. [Tối ưu để KHÔNG giảm độ chính xác](#10-tối-ưu-để-không-giảm-độ-chính-xác)
+11. [Chạy API server nhẹ trên Termux](#11-chạy-api-server-nhẹ-trên-termux)
+12. [Xử lý lỗi thường gặp](#12-xử-lý-lỗi-thường-gặp)
 
 ---
 
@@ -242,7 +243,7 @@ ls ~/captcha-solver/
 
 ---
 
-## 8. Chạy inference
+## 8. Chạy inference 1 ảnh
 
 ### Bước 8.1 — Kích hoạt môi trường
 ```bash
@@ -250,7 +251,7 @@ cd ~/captcha-solver
 source .venv/bin/activate
 ```
 
-### Bước 8.2 — Test với 1 ảnh
+### Bước 8.2 — Test nhanh 1 ảnh bất kỳ
 ```bash
 python predict.py \
   --ckpt best-epoch072.ckpt \
@@ -259,67 +260,109 @@ python predict.py \
   --config configs/trocr_base_3090ti.yaml
 ```
 
-### Bước 8.3 — Script inference đơn giản (tạo file `mobile_predict.py`)
-```python
-#!/usr/bin/env python3
-"""
-Inference script tối ưu cho mobile — không cần CUDA.
-Usage: python mobile_predict.py --image captcha.png
-"""
-import argparse
-import torch
-from PIL import Image
-from src.trocr import TrOCRLitModel
+---
 
-def predict_mobile(ckpt_path: str, image_path: str) -> str:
-    # Luôn dùng CPU — không cần CUDA
-    device = "cpu"
-    
-    # Load model (chỉ load 1 lần nếu gọi nhiều lần)
-    model = TrOCRLitModel.load_from_checkpoint(
-        ckpt_path,
-        map_location=device  # Quan trọng: chuyển từ CUDA sang CPU
-    )
-    model.eval().to(device)
-    
-    img = Image.open(image_path).convert("RGB")
-    pixel_values = model.processor(
-        images=img, 
-        return_tensors="pt"
-    ).pixel_values.to(device)
-    
-    with torch.no_grad():
-        gen = model.model.generate(
-            pixel_values,
-            num_beams=8,           # Giữ nguyên num_beams từ config
-            max_length=16,
-            repetition_penalty=1.3
-        )
-    
-    result = model.processor.batch_decode(
-        gen, skip_special_tokens=True
-    )[0].replace(" ", "").upper()
-    
-    return result
+## 9. 🆕 Test batch ảnh thư mục `ac/`
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", default="best-epoch072.ckpt")
-    parser.add_argument("--image", required=True)
-    args = parser.parse_args()
-    
-    text = predict_mobile(args.ckpt, args.image)
-    print(f"Kết quả: {text}")
+> Đây là cách **nhanh nhất** để kiểm tra độ chính xác model trên toàn bộ ảnh trong thư mục `ac/`.
+> Script **tự đọc label từ tên file** nên không cần cấu hình thêm gì.
+
+### Tên file trong `ac/` có dạng:
+```
+map_XXXXX_<timestamp>_<hash>__cvxxN.png
+     ^^^^^
+     label chính xác 5 ký tự — script tự parse
 ```
 
-Lưu và chạy:
+### Bước 9.1 — Chuyển thư mục `ac/` và script sang điện thoại
+
+**Cách A — qua USB (ADB):**
+```powershell
+# Trên máy tính Windows
+adb push ac/ /sdcard/captcha-solver/ac/
+adb push mobile_test_ac.py /sdcard/captcha-solver/
+```
+Trên Termux:
 ```bash
-python mobile_predict.py --image /sdcard/Pictures/captcha.png
+cp -r /sdcard/captcha-solver/ac ~/captcha-solver/
+cp /sdcard/captcha-solver/mobile_test_ac.py ~/captcha-solver/
 ```
+
+**Cách B — git pull (nếu đã clone):**
+```bash
+cd ~/captcha-solver
+git pull origin main
+# Script mobile_test_ac.py và thư mục ac/ đã có sẵn trong repo
+```
+
+### Bước 9.2 — Chạy test toàn bộ ảnh trong `ac/`
+```bash
+cd ~/captcha-solver
+source .venv/bin/activate
+
+python mobile_test_ac.py
+```
+
+Kết quả mẫu:
+```
+File                                Label    Pred    ms
+────────────────────────────────────────────────────────
+…1_1779292888582_ba17__cvxx1.png   773JE   773JE  ✓ 4231
+…2_1779292899051_3329__cvxx2.png   NEWTL   NEWTL  ✓ 3987
+…3_1779292913706_0cd6__cvxx3.png   J4D7J   J4D7J  ✓ 4102
+…4_1779292926785_5498__cvxx4.png   RMVTY   RMVTY  ✓ 3851
+…5_1779292943712_a171__cvxx5.png   XUWQJ   XUWQJ  ✓ 4289
+────────────────────────────────────────────────────────
+
+📊 KẾT QUẢ:
+  Tổng ảnh có label : 11
+  Đúng              : 10
+  Sai               : 1
+  Accuracy          : 90.9%
+  Tốc độ TB         : 4123 ms/ảnh
+```
+
+### Bước 9.3 — Các tùy chọn hữu ích
+
+```bash
+# Chỉ định thư mục ac khác
+python mobile_test_ac.py --ac_dir /sdcard/Download/my_captchas
+
+# Chỉ định checkpoint khác
+python mobile_test_ac.py --ckpt /sdcard/captcha-solver/best-epoch052.ckpt
+
+# Tắt màu ANSI (khi terminal không hỗ trợ)
+python mobile_test_ac.py --no_color
+
+# Kết hợp
+python mobile_test_ac.py \
+  --ckpt best-epoch072.ckpt \
+  --ac_dir ac \
+  --no_color
+```
+
+### Bước 9.4 — Lưu kết quả ra file
+```bash
+# Redirect output ra file để xem lại
+python mobile_test_ac.py --no_color 2>&1 | tee ~/test_results.txt
+
+# Xem file sau
+cat ~/test_results.txt
+```
+
+### Bước 9.5 — Giải thích cột kết quả
+
+| Cột | Ý nghĩa |
+|-----|---------|
+| `File` | Tên file rút gọn |
+| `Label` | Ground truth từ tên file |
+| `Pred` | Model đoán |
+| `✓` / `✗` | Đúng / Sai |
+| `ms` | Thời gian inference (millisecond) |
 
 ---
 
-## 9. Tối ưu để KHÔNG giảm độ chính xác
+## 10. Tối ưu để KHÔNG giảm độ chính xác
 
 ### ✅ Nguyên tắc vàng: Không thay đổi gì về weights
 
@@ -398,7 +441,7 @@ model_quantized = torch.quantization.quantize_dynamic(
 
 ---
 
-## 10. Chạy API server nhẹ trên Termux
+## 11. Chạy API server nhẹ trên Termux
 
 Nếu muốn gọi model từ ứng dụng khác (ví dụ browser hoặc app Android):
 
@@ -484,7 +527,7 @@ curl -X POST http://192.168.x.x:5000/solve \
 
 ---
 
-## 11. Xử lý lỗi thường gặp
+## 12. Xử lý lỗi thường gặp
 
 ### ❌ Lỗi: `No module named 'cv2'`
 ```bash
@@ -573,12 +616,15 @@ pip install pytorch-lightning transformers sentencepiece pillow numpy pandas pyy
 git clone https://github.com/cavoixanh1806/captcha-map-solver.git .
 # Copy best-epoch072.ckpt vào ~/captcha-solver/
 
-# 7. Chạy inference
+# 7. Chạy inference 1 ảnh
 python predict.py \
   --ckpt best-epoch072.ckpt \
   --image /sdcard/Pictures/captcha.png \
   --task trocr \
   --config configs/trocr_base_3090ti.yaml
+
+# 8. Test toàn bộ ảnh trong ac/ (recommended)
+python mobile_test_ac.py
 ```
 
 ---
@@ -596,4 +642,4 @@ python predict.py \
 
 ---
 
-*Tạo ngày: 2026-05-20 | Chip: Snapdragon 8s Gen 3 (ARM64) | Model: TrOCR-base best-epoch072*
+*Tạo ngày: 2026-05-20 | Cập nhật: 2026-05-20 | Chip: Snapdragon 8s Gen 3 (ARM64) | Model: TrOCR-base best-epoch072*
