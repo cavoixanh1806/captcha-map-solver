@@ -164,10 +164,12 @@ class LabelingServer(HTTPServer):
             # Otherwise, if it has a 5-character alphanumeric label (e.g. map_4KTN9.png or map_4KTN9_1.png), it is labeled.
             label_pattern = re.compile(r"^map_([A-Z0-9]{5})(?:_\d+)?\.png$", re.IGNORECASE)
             number_pattern = re.compile(r"^map_\d+\.png$")
+            predicted_pattern = re.compile(r"^map_([A-Z0-9]{5})_.*\.png$", re.IGNORECASE)
 
             for idx, filepath in enumerate(files):
                 filename = filepath.name
                 
+                predicted = ""
                 if number_pattern.match(filename):
                     text = "" # Unlabeled
                 else:
@@ -176,11 +178,15 @@ class LabelingServer(HTTPServer):
                         text = match_label.group(1).upper()
                     else:
                         text = "" # Unlabeled fallback
+                        match_pred = predicted_pattern.match(filename)
+                        if match_pred:
+                            predicted = match_pred.group(1).upper()
 
                 rows.append({
                     "index": idx,
                     "filename": filename,
-                    "text": text
+                    "text": text,
+                    "predicted": predicted
                 })
             return rows
 
@@ -848,7 +854,7 @@ HTML_PAGE = """<!DOCTYPE html>
             
             // Append random query parameter to bypass cache and force reload (specifically useful for renaming mode)
             imgEl.src = '/images/' + item.filename + '?t=' + new Date().getTime();
-            inputEl.value = item.text || '';
+            inputEl.value = item.text || item.predicted || '';
             inputEl.focus();
             inputEl.select();
         }
