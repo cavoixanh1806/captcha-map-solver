@@ -28,10 +28,18 @@ def main():
         print(f"Error: Metadata file '{METADATA_PATH}' does not exist.")
         return
 
-    # 1. Find the maximum existing index in data/
+    # 1. Find the maximum existing index and load existing labels in data/
     existing_files = glob.glob(os.path.join(DATA_DIR, 'map_*.png'))
     max_idx = -1
     pattern = re.compile(r'map_(\d{5})\.png')
+    
+    existing_labels = set()
+    if os.path.exists(METADATA_PATH):
+        with open(METADATA_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) >= 2:
+                    existing_labels.add(row[1].upper())
 
     for f in existing_files:
         basename = os.path.basename(f)
@@ -43,6 +51,7 @@ def main():
 
     next_idx = max_idx + 1
     print(f"Current max index in data: {max_idx:05d}")
+    print(f"Total existing unique labels: {len(existing_labels)}")
     print(f"Starting import from index: {next_idx:05d}")
 
     # 2. Scan map_*.png in source directory
@@ -52,9 +61,10 @@ def main():
         return
 
     ac_files.sort()
-    print(f"Found {len(ac_files)} files in '{source_dir_name}/' to import.")
+    print(f"Found {len(ac_files)} files in '{source_dir_name}/' to scan.")
 
     imported_count = 0
+    skipped_count = 0
     new_rows = []
 
     # Check if metadata.csv ends with a newline
@@ -72,12 +82,19 @@ def main():
             continue
 
         label = match.group(1).upper()
+        
+        # Skip if label already exists
+        if label in existing_labels:
+            skipped_count += 1
+            continue
+
         new_filename = f"map_{next_idx:05d}.png"
         dst_path = os.path.join(DATA_DIR, new_filename)
 
         try:
             shutil.copy2(src_path, dst_path)
             new_rows.append((new_filename, label))
+            existing_labels.add(label) # Prevent duplicates within the same import run
             next_idx += 1
             imported_count += 1
         except Exception as e:
@@ -93,10 +110,11 @@ def main():
             for row in new_rows:
                 writer.writerow(row)
 
-        print(f"--> Success: Imported {imported_count} images to '{DATA_DIR}' and updated '{METADATA_PATH}'.")
+        print(f"--> Success: Imported {imported_count} images, skipped {skipped_count} duplicates.")
+        print(f"Updated '{METADATA_PATH}'.")
         print(f"You can safely delete files in '{source_dir_name}/' directory now.")
     else:
-        print("No images were imported.")
+        print(f"No images were imported. (Skipped {skipped_count} duplicates)")
 
 if __name__ == '__main__':
     main()
