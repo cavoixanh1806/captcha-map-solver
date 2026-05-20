@@ -583,12 +583,38 @@ python mobile_test_ac.py --model_dir ./trocr-base-printed
 > python mobile_test_ac.py --offline  # dùng cache, hoàn toàn offline
 > ```
 
+### ❌ Lỗi: `RuntimeError: Missing key(s) in state_dict` / BEiT key mismatch
+
+```
+RuntimeError: Error(s) in loading state_dict for TrOCRLitModel:
+    Missing key(s): "model.encoder.layers.0.attention.q_proj.weight", ...
+```
+
+**Nguyên nhân:** Checkpoint được train với **transformers cũ** (BEiT dùng `attention.attention.query`), nhưng điện thoại cài **transformers mới** (dùng `attention.q_proj`).
+
+**Fix — Đã được fix tự động trong `mobile_test_ac.py` mới nhất:**
+```bash
+git pull origin main
+python mobile_test_ac.py   # script tự remap keys, in thông báo "Đã remap X keys"
+```
+
+Script sẽ in:
+```
+⚙️  Phát hiện checkpoint dùng BEiT naming cũ (transformers <4.47)
+   → Tự động remap keys sang format mới...
+   ✅ Đã remap 192 keys
+   ✅ Tất cả fine-tuned weights load thành công!
+```
+
+**Tại sao script mới không bị lỗi này:** Script mới bypass hoàn toàn `TrOCRLitModel.load_from_checkpoint` (PyTorch Lightning), thay bằng load thẳng vào `VisionEncoderDecoderModel` với key remapping tự động. Không phụ thuộc phiên bản transformers.
+
 ### ❌ Lỗi: `No module named 'cv2'`
 ```bash
 # opencv-python không hỗ trợ ARM64 trên Termux — cài bản headless
 pip install opencv-python-headless
 # Nếu vẫn lỗi, tắt hoàn toàn opencv trong code (không cần cho inference TrOCR)
 ```
+
 
 
 ### ❌ Lỗi: `RuntimeError: PytorchStreamReader failed reading zip archive`
