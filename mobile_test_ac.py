@@ -113,6 +113,12 @@ def _remap_beit_keys(sd: dict) -> dict:
     """
     Phát hiện và remap BEiT attention keys nếu checkpoint dùng naming cũ.
     Trả về state_dict đã remap (hoặc nguyên vẹn nếu không cần).
+
+    Áp dụng TẤT CẢ rules theo thứ tự cho mỗi key (không break sớm).
+    Ví dụ key cần 2 rules:
+      encoder.encoder.layer.0.attention.attention.query.weight
+      → (rule 1) encoder.layers.0.attention.attention.query.weight
+      → (rule 2) encoder.layers.0.attention.q_proj.weight   ✓
     """
     needs_remap = any(
         "encoder.encoder.layer." in k or ".attention.attention.query." in k
@@ -129,16 +135,16 @@ def _remap_beit_keys(sd: dict) -> dict:
     remapped = 0
     for k, v in sd.items():
         new_k = k
+        # Áp dụng TẤT CẢ rules liên tiếp — KHÔNG break sớm
         for pattern, replacement in _REMAP_RULES:
-            after = re.sub(pattern, replacement, new_k)
-            if after != new_k:
-                new_k = after
-                remapped += 1
-                break  # áp dụng rule đầu tiên khớp
+            new_k = re.sub(pattern, replacement, new_k)
+        if new_k != k:
+            remapped += 1
         new_sd[new_k] = v
 
     print(col(C.GREEN, f"   ✅ Đã remap {remapped}/{len(sd)} keys"))
     return new_sd
+
 
 
 # ────────────────────────────────────────────────────────────────────────
