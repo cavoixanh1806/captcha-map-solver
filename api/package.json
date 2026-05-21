@@ -1,0 +1,13 @@
+{
+  "name": "captcha-api-mobile",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node node_server.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

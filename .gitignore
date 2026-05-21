@@ -40,3 +40,6 @@ Thumbs.db
 checker/
 ac/
 
+
+# ONNX Model Artifacts
+onnx_model/

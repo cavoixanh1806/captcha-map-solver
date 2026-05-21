@@ -10,16 +10,16 @@ Phương pháp đánh giá: Chạy suy luận (inference) trên **500 ảnh đ�
 
 ## 📊 Kết quả Tổng hợp
 
-| Chỉ số | Model 32 (`best-epoch032.ckpt`) | Model 72 (`best-epoch072.ckpt`) |
-| :--- | :---: | :---: |
-| **Độ chính xác (Accuracy)** | **98.40%** | **98.80%** (Tốt nhất) |
-| **Số ảnh đoán đúng** | 492 / 500 | 494 / 500 |
-| **Số ảnh đoán sai** | 8 | 6 |
-| **Số lỗi khắc phục được** | - | 7 trường hợp (M32 sai, M72 đúng) |
-| **Số lỗi phát sinh mới** | - | 5 trường hợp (M32 đúng, M72 sai) |
+| Chỉ số | Model 32 (`best-epoch032.ckpt`) | ONNX Model 32 | Model 72 (`best-epoch072.ckpt`) |
+| :--- | :---: | :---: | :---: |
+| **Độ chính xác (Accuracy)** | **98.40%** | **98.40%** | **98.80%** (Tốt nhất) |
+| **Số ảnh đoán đúng** | 492 / 500 | 492 / 500 | 494 / 500 |
+| **Số ảnh đoán sai** | 8 | 8 | 6 |
+| **Số lỗi khắc phục được** | - | - | 7 trường hợp (M32 sai, M72 đúng) |
+| **Số lỗi phát sinh mới** | - | - | 5 trường hợp (M32 đúng, M72 sai) |
 
 > [!NOTE]
-> Tổng số ảnh bị đoán sai bởi ít nhất một trong hai mô hình là **13 ảnh** (chiếm tỉ lệ 2.6%).
+> Tổng số ảnh bị đoán sai bởi ít nhất một trong hai mô hình là **13 ảnh** (chiếm tỉ lệ 2.6%). Mô hình ONNX được xuất từ `best-epoch032.ckpt` cho kết quả **chính xác 100%** (không suy giảm hiệu suất) so với bản gốc chạy trên PyTorch.
 
 ---
 
@@ -27,21 +27,21 @@ Phương pháp đánh giá: Chạy suy luận (inference) trên **500 ảnh đ�
 
 Dưới đây là danh sách toàn bộ các trường hợp có ít nhất một mô hình dự đoán sai:
 
-| STT | Tên File | Nhãn Thật | Model 32 | Model 72 | Trạng thái chi tiết |
-| :---: | :--- | :---: | :---: | :---: | :--- |
-| **1** | `map_00013.png` | **FYEVU** | `EYEVU` | `FYEVU` | 🟢 Model 72 khắc phục (Sửa `E` thành `F`) |
-| **2** | `map_00065.png` | **VHMLW** | `VHMYW` | `VHMLW` | 🟢 Model 72 khắc phục (Sửa `Y` thành `L`) |
-| **3** | `map_00093.png` | **YRRCD** | `YPRCD` | `YRRCD` | 🟢 Model 72 khắc phục (Sửa `P` thành `R`) |
-| **4** | `map_00142.png` | **KEREA** | `KEREA` | `KENE4` | 🔴 Model 72 sai mới (Nhầm `R` $\rightarrow$ `N`, `A` $\rightarrow$ `4`) |
-| **5** | `map_00178.png` | **7Q9WX** | `7C9WX` | `7Q9WX` | 🟢 Model 72 khắc phục (Sửa `C` thành `Q`) |
-| **6** | `map_00189.png` | **P4RCU** | `P4RCU` | `P4KCU` | 🔴 Model 72 sai mới (Nhầm `R` $\rightarrow$ `K`) |
-| **7** | `map_00198.png` | **FLEUE** | `FLFUE` | `FLEUE` | 🟢 Model 72 khắc phục (Sửa `F` thành `E`) |
-| **8** | `map_00232.png` | **E3QPD** | `E3QPD` | `E3QLD` | 🔴 Model 72 sai mới (Nhầm `P` $\rightarrow$ `L`) |
-| **9** | `map_00255.png` | **DKEAL** | `LKEAL` | `DKEAL` | 🟢 Model 72 khắc phục (Sửa `L` thành `D`) |
-| **10** | `map_00298.png` | **FJKWN** | `FJKWN` | `FJNWN` | 🔴 Model 72 sai mới (Nhầm `K` $\rightarrow$ `N`) |
-| **11** | `map_00326.png` | **KAEAX** | `KAAAX` | `KALAX` | ❌ Cả hai đều đoán sai (M32 nhầm `E` $\rightarrow$ `A`, M72 nhầm `E` $\rightarrow$ `L`) |
-| **12** | `map_00335.png` | **NTMKR** | `NTMKR` | `N7MKR` | 🔴 Model 72 sai mới (Nhầm `T` $\rightarrow$ `7`) |
-| **13** | `map_00407.png` | **WWRJV** | `VWRJV` | `WWRJV` | 🟢 Model 72 khắc phục (Sửa `V` thành `W`) |
+| STT | Tên File | Nhãn Thật | Model 32 | ONNX (M32) | Model 72 | Trạng thái chi tiết |
+| :---: | :--- | :---: | :---: | :---: | :---: | :--- |
+| **1** | `map_00013.png` | **FYEVU** | `EYEVU` | `EYEVU` | `FYEVU` | 🟢 Model 72 khắc phục (Sửa `E` thành `F`) |
+| **2** | `map_00065.png` | **VHMLW** | `VHMYW` | `VHMYW` | `VHMLW` | 🟢 Model 72 khắc phục (Sửa `Y` thành `L`) |
+| **3** | `map_00093.png` | **YRRCD** | `YPRCD` | `YPRCD` | `YRRCD` | 🟢 Model 72 khắc phục (Sửa `P` thành `R`) |
+| **4** | `map_00142.png` | **KEREA** | `KEREA` | `KEREA` | `KENE4` | 🔴 Model 72 sai mới (Nhầm `R` $\rightarrow$ `N`, `A` $\rightarrow$ `4`) |
+| **5** | `map_00178.png` | **7Q9WX** | `7C9WX` | `7C9WX` | `7Q9WX` | 🟢 Model 72 khắc phục (Sửa `C` thành `Q`) |
+| **6** | `map_00189.png` | **P4RCU** | `P4RCU` | `P4RCU` | `P4KCU` | 🔴 Model 72 sai mới (Nhầm `R` $\rightarrow$ `K`) |
+| **7** | `map_00198.png` | **FLEUE** | `FLFUE` | `FLFUE` | `FLEUE` | 🟢 Model 72 khắc phục (Sửa `F` thành `E`) |
+| **8** | `map_00232.png` | **E3QPD** | `E3QPD` | `E3QPD` | `E3QLD` | 🔴 Model 72 sai mới (Nhầm `P` $\rightarrow$ `L`) |
+| **9** | `map_00255.png` | **DKEAL** | `LKEAL` | `LKEAL` | `DKEAL` | 🟢 Model 72 khắc phục (Sửa `L` thành `D`) |
+| **10** | `map_00298.png` | **FJKWN** | `FJKWN` | `FJKWN` | `FJNWN` | 🔴 Model 72 sai mới (Nhầm `K` $\rightarrow$ `N`) |
+| **11** | `map_00326.png` | **KAEAX** | `KAAAX` | `KAAAX` | `KALAX` | ❌ Cả hai đều đoán sai |
+| **12** | `map_00335.png` | **NTMKR** | `NTMKR` | `NTMKR` | `N7MKR` | 🔴 Model 72 sai mới (Nhầm `T` $\rightarrow$ `7`) |
+| **13** | `map_00407.png` | **WWRJV** | `VWRJV` | `VWRJV` | `WWRJV` | 🟢 Model 72 khắc phục (Sửa `V` thành `W`) |
 
 ---
 
