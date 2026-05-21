@@ -78,10 +78,8 @@ app.post('/solve-file', upload.single('file'), async (req, res) => {
         const startTime = performance.now();
         console.log(`[API] Đang xử lý file ảnh: ${req.file.originalname} (${req.file.size} bytes)`);
         
-        const base64Data = req.file.buffer.toString('base64');
-        const dataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-
-        const result = await captchaSolver(dataUrl);
+        // Truyền trực tiếp Buffer vào model (nhanh và tránh lỗi 404)
+        const result = await captchaSolver(req.file.buffer);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
@@ -103,11 +101,15 @@ app.post('/solve-base64', async (req, res) => {
         const startTime = performance.now();
         console.log(`[API] Nhận request Base64 (độ dài: ${req.body.image_base64.length} chars)`);
         
-        const base64Str = req.body.image_base64.startsWith('data:') 
-            ? req.body.image_base64 
-            : `data:image/png;base64,${req.body.image_base64}`;
+        let b64Data = req.body.image_base64;
+        if (b64Data.includes(',')) {
+            b64Data = b64Data.split(',')[1];
+        }
+        
+        // Chuyển Base64 thành Buffer trước khi đưa vào model
+        const buffer = Buffer.from(b64Data, 'base64');
 
-        const result = await captchaSolver(base64Str);
+        const result = await captchaSolver(buffer);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
