@@ -113,34 +113,49 @@ _REMAP_RULES: list[tuple[str, str]] = [
     (r"^(encoder\.layers\.\d+)\.lambda_2$", r"\1.layer_scale2"),
 ]
 
-def _remap_beit_keys(sd: dict) -> dict:
+def _remap_beit_keys(sd: dict, model=None) -> dict:
     """
-    Áp dụng TẤT CẢ remap rules cho từng key (không break sớm).
-    Một key có thể cần nhiều rules liên tiếp:
-      encoder.encoder.layer.0.attention.attention.query.weight
-      → (rule 1) encoder.layers.0.attention.attention.query.weight
-      → (rule 2) encoder.layers.0.attention.q_proj.weight   ✓
+    Remap BEiT encoder keys CHI KHI checkpoint cũ + model mới.
+
+    checkpoint cũ + model cũ (downgrade transformers)  → KHÔNG remap
+    checkpoint cũ + model mới (transformers ≥4.44)      → CÓ remap
+    checkpoint mới + model mới                         → KHÔNG remap
     """
-    needs_remap = any(
-        "encoder.encoder.layer." in k or ".attention.attention.query." in k
+    ckpt_has_old = any(
+        k.startswith("encoder.encoder.layer.") or
+        ".attention.attention.query." in k
         for k in sd.keys()
     )
-    if not needs_remap:
-        return sd
+    if not ckpt_has_old:
+        return sd   # checkpoint dùng naming mới, không cần remap
 
-    print(col(C.YELLOW, "⚙️  BEiT naming cũ (transformers <4.47) → tự động remap..."))
+    if model is not None:
+        model_has_new = any(
+            "encoder.layers." in k and ".q_proj" in k
+            for k, _ in model.named_parameters()
+        )
+    else:
+        model_has_new = True  # cẩn thận, assume mới nếu không biết
+
+    if not model_has_new:
+        print(col(C.GREEN, "✅ Checkpoint + model cùng naming cũ — không cần remap"))
+        return sd  # downgrade transformers, load thẳng
+
+    # Checkpoint cũ + model mới → cần remap
+    print(col(C.YELLOW, "⚙️  Checkpoint cũ + transformers ≥4.44 → đang remap..."))
     new_sd: dict = {}
     remapped = 0
     for k, v in sd.items():
         new_k = k
         for pattern, replacement in _REMAP_RULES:
-            new_k = re.sub(pattern, replacement, new_k)   # TẤT CẢ rules, không break
+            new_k = re.sub(pattern, replacement, new_k)
         if new_k != k:
             remapped += 1
         new_sd[new_k] = v
 
     print(col(C.GREEN, f"   ✅ Đã remap {remapped}/{len(sd)} keys"))
     return new_sd
+
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -194,10 +209,7 @@ def load_model(
 
     print(col(C.DIM, f"   {len(sd)} weight tensors"))
 
-    # ── B2: Remap BEiT keys ────────────────────────────────────────────
-    sd = _remap_beit_keys(sd)
-
-    # ── B3: Load base model ────────────────────────────────────────────
+    # ── B2: Load base model TRƯỚC (cần biết naming model để quyết định remap)
     print(col(C.CYAN, "   Load base model architecture..."))
     processor = TrOCRProcessor.from_pretrained(pretrained_src)
     model     = VisionEncoderDecoderModel.from_pretrained(pretrained_src)
@@ -206,6 +218,9 @@ def load_model(
     model.config.pad_token_id           = processor.tokenizer.pad_token_id
     model.config.eos_token_id           = processor.tokenizer.sep_token_id
     model.config.vocab_size             = model.config.decoder.vocab_size
+
+    # ── B3: Remap keys nếu cần (kiểm tra cả checkpoint lẫn model) ─────────
+    sd = _remap_beit_keys(sd, model)
 
     # ── B4: Load fine-tuned weights ────────────────────────────────────
     result = model.load_state_dict(sd, strict=False)
