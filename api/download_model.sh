@@ -1,24 +1,31 @@
 #!/bin/bash
 
-# Script tải model TrOCR ONNX và thiết lập môi trường cho Termux (Android)
-# Khắc phục lỗi: Rust Panic (SSL) và Unsupported Platform (onnxruntime-node)
+# Script cấu hình môi trường TrOCR cho Termux (Android) - Bản 2.0
+# Fix lỗi: [cpu] backend not found
 
 MODEL_DIR="../onnx_model"
 ONNX_DIR="$MODEL_DIR/onnx"
 BASE_URL="https://huggingface.co/cavoixanh1806/captcha-trocr-onnx/resolve/main"
 
-echo "[INFO] 1. Thiết lập 'Bản giả' (Shim) cho onnxruntime-node..."
-# Khắc phục lỗi không cài được onnxruntime-node trên Android
+echo "[INFO] 1. Cài đặt engine Wasm bổ trợ cho Android..."
+# Cài đặt thêm onnxruntime-web vì nó chứa các file .wasm cần thiết
+npm install onnxruntime-web@1.20.1 --force
+
+echo "[INFO] 2. Thiết lập 'Bản giả' (Shim) thông minh..."
 SHIM_DIR="node_modules/onnxruntime-node"
 mkdir -p "$SHIM_DIR"
 echo '{"name":"onnxruntime-node","main":"index.js"}' > "$SHIM_DIR/package.json"
-echo 'const common = require("onnxruntime-common"); module.exports = common;' > "$SHIM_DIR/index.js"
-echo 'import * as common from "onnxruntime-common"; export default common;' > "$SHIM_DIR/index.mjs"
 
-echo "[INFO] 2. Tạo thư mục model..."
+# Viết mã giả để đánh lừa Transformers.js: Khi nó đòi "cpu", chúng ta đưa cho nó "wasm"
+cat <<EOF > "$SHIM_DIR/index.js"
+const ort = require('onnxruntime-web');
+module.exports = ort;
+EOF
+
+echo "[INFO] 3. Tạo thư mục model..."
 mkdir -p "$ONNX_DIR"
 
-echo "[INFO] 3. Bắt đầu tải các file cấu hình..."
+echo "[INFO] 4. Tải các file cấu hình và Model (sử dụng curl)..."
 files=(
     "config.json"
     "generation_config.json"
@@ -31,17 +38,23 @@ files=(
 )
 
 for file in "${files[@]}"; do
-    echo " -> Tải $file..."
-    curl -L "$BASE_URL/$file" -o "$MODEL_DIR/$file"
+    if [ ! -f "$MODEL_DIR/$file" ]; then
+        echo " -> Tải $file..."
+        curl -L "$BASE_URL/$file" -o "$MODEL_DIR/$file"
+    else
+        echo " -> $file đã tồn tại, bỏ qua."
+    fi
 done
 
-echo "[INFO] 4. Đang tải các file Model ONNX (Dung lượng lớn, vui lòng đợi)..."
+if [ ! -f "$ONNX_DIR/encoder_model.onnx" ]; then
+    echo " -> Tải encoder_model.onnx (~340MB)..."
+    curl -L "$BASE_URL/onnx/encoder_model.onnx" -o "$ONNX_DIR/encoder_model.onnx"
+fi
 
-echo " -> Tải encoder_model.onnx (~340MB)..."
-curl -L "$BASE_URL/onnx/encoder_model.onnx" -o "$ONNX_DIR/encoder_model.onnx"
+if [ ! -f "$ONNX_DIR/decoder_model_merged.onnx" ]; then
+    echo " -> Tải decoder_model_merged.onnx (~1.2GB)..."
+    curl -L "$BASE_URL/onnx/decoder_model_merged.onnx" -o "$ONNX_DIR/decoder_model_merged.onnx"
+fi
 
-echo " -> Tải decoder_model_merged.onnx (~1.2GB)..."
-curl -L "$BASE_URL/onnx/decoder_model_merged.onnx" -o "$ONNX_DIR/decoder_model_merged.onnx"
-
-echo "[SUCCESS] Môi trường đã sẵn sàng và đã tải xong model!"
-echo "Bây giờ bạn có thể chạy: npm start"
+echo "[SUCCESS] Môi trường Wasm đã sẵn sàng!"
+echo "Bây giờ bạn hãy chạy: npm start"
