@@ -10,14 +10,19 @@ const __dirname = path.dirname(__filename);
 // Cấu hình môi trường cho local model
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = '../'; // Dẫn ra thư mục gốc chứa onnx_model
+env.localModelPath = '../'; 
+
+// --- CẤU HÌNH ĐẶC BIỆT CHO TERMUX/ANDROID ---
+env.backends.onnx.wasm.proxy = false; 
+env.backends.onnx.gpu = false;        
+// --------------------------------------------
 
 const app = express();
 const port = 5000;
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public'))); // Phục vụ giao diện WebApp
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 // --- HỆ THỐNG LƯU LOG ĐỂ HIỂN THỊ LÊN WEBAPP ---
 const MAX_LOGS = 200;
@@ -46,14 +51,14 @@ let captchaSolver;
 let isReady = false;
 
 async function initModel() {
-    console.log('[SYSTEM] Đang khởi động AI Engine (Transformers.js)...');
+    console.log('[SYSTEM] Đang khởi động AI Engine (Wasm Mode)...');
     try {
         captchaSolver = await pipeline('image-to-text', 'onnx_model', {
             device: 'wasm', 
             dtype: 'fp32'
         });
         isReady = true;
-        console.log('[SYSTEM] Tải mô hình TrOCR ONNX thành công! API đã sẵn sàng.');
+        console.log('[SYSTEM] Tải mô hình TrOCR thành công! API đã sẵn sàng.');
     } catch (e) {
         console.error('[ERROR] Lỗi tải mô hình:', e.message);
     }
