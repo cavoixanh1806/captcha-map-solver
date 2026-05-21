@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { pipeline, env } from '@huggingface/transformers';
+import { pipeline, env, RawImage } from '@huggingface/transformers';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -78,8 +78,9 @@ app.post('/solve-file', upload.single('file'), async (req, res) => {
         const startTime = performance.now();
         console.log(`[API] Đang xử lý file ảnh: ${req.file.originalname} (${req.file.size} bytes)`);
         
-        // Truyền trực tiếp Buffer vào model (nhanh và tránh lỗi 404)
-        const result = await captchaSolver(req.file.buffer);
+        // Sử dụng RawImage để đọc Buffer một cách an toàn trong môi trường Node.js
+        const image = await RawImage.read(req.file.buffer);
+        const result = await captchaSolver(image);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
@@ -106,10 +107,10 @@ app.post('/solve-base64', async (req, res) => {
             b64Data = b64Data.split(',')[1];
         }
         
-        // Chuyển Base64 thành Buffer trước khi đưa vào model
         const buffer = Buffer.from(b64Data, 'base64');
+        const image = await RawImage.read(buffer);
 
-        const result = await captchaSolver(buffer);
+        const result = await captchaSolver(image);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
@@ -133,6 +134,14 @@ app.get('/api/status', (req, res) => {
         status: isReady ? 'online' : 'starting',
         uptime: process.uptime(),
         memoryUsage: process.memoryUsage()
+    });
+});
+
+// 5. Health Check
+app.get('/health', (req, res) => {
+    res.json({
+        status: isReady ? 'healthy' : 'initializing',
+        engine: 'transformers.js (Wasm)'
     });
 });
 
