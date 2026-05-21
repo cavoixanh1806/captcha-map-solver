@@ -39,18 +39,18 @@ npm install --force
 
 ---
 
-## 🧠 Bước 3: Tải Model AI từ Hugging Face
-Do một số lỗi bảo mật SSL (Rust panic) trên Android, bạn **không nên** dùng lệnh `hf download` trực tiếp. Hãy sử dụng script tải bằng `curl` mà tôi đã viết sẵn:
+## 🧠 Bước 3: Thiết lập môi trường và Tải Model AI
+Tôi đã viết một script tổng hợp giúp bạn tự động xử lý lỗi **onnxruntime-node** (không hỗ trợ Android) và lỗi **xác thực SSL** khi tải model.
+
+Bạn chỉ cần chạy 2 lệnh sau:
 
 ```bash
 # Cấp quyền thực thi cho script
 chmod +x download_model.sh
 
-# Chạy script tải model
+# Chạy script (Sẽ tự tạo bản giả thư viện và tải model ~1.5GB)
 ./download_model.sh
 ```
-
-*(Script này sẽ tự động tải các file cấu hình và model ONNX nặng ~1.5GB về máy của bạn một cách an toàn).*
 
 ---
 
