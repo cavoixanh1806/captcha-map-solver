@@ -21,7 +21,7 @@ def load_metadata(metadata_path: str) -> dict:
     return labels
 
 def main():
-    checkpoint_path = "best-epoch052.ckpt"
+    checkpoint_path = "best-epoch032.ckpt"
     metadata_path = "data/metadata.csv"
     data_dir = "data"
     

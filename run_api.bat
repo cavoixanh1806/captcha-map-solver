@@ -21,15 +21,15 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo [1/2] Activating virtual environment and checking all dependencies...
 :: Automatically verify and install all dependencies if not already done
-.\.venv\Scripts\python.exe -c "import torch, transformers, pytorch_lightning, fastapi, uvicorn" 2>nul
+.\.venv\Scripts\python.exe -c "import torch, torchvision, transformers, pytorch_lightning, fastapi, uvicorn, sentencepiece" 2>nul
 if %errorlevel% neq 0 (
     echo Core dependencies not found. Installing everything now...
     
-    echo 1. Installing lightweight PyTorch CPU optimized...
+    echo 1. Installing lightweight PyTorch and Torchvision CPU optimized...
     .\.venv\Scripts\pip.exe install torch torchvision --index-url https://download.pytorch.org/whl/cpu
     
-    echo 2. Installing Transformers, Lightning and API web libraries...
-    .\.venv\Scripts\pip.exe install transformers pytorch-lightning tqdm pillow fastapi uvicorn python-multipart pydantic
+    echo 2. Installing Transformers, Lightning, SentencePiece and API web libraries...
+    .\.venv\Scripts\pip.exe install transformers pytorch-lightning tqdm pillow fastapi uvicorn python-multipart pydantic sentencepiece
     
     echo [SUCCESS] All dependencies installed successfully!
 ) else (

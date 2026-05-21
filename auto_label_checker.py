@@ -4,7 +4,7 @@ from tqdm import tqdm
 from solve_captcha import CaptchaSolver
 
 def main():
-    checkpoint_path = "best-epoch052.ckpt"
+    checkpoint_path = "best-epoch032.ckpt"
     source_dir = "ac"
     dest_dir = "checker"
     

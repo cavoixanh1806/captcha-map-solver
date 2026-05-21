@@ -9,6 +9,8 @@ Tài liệu này hướng dẫn nhanh các bước thiết lập môi trường 
 Sau khi clone hoặc tải mã nguồn về máy, bạn thực hiện cài đặt môi trường theo hệ điều hành tương ứng:
 
 ### A. Trên hệ điều hành Windows:
+git clone https://github.com/cvx1806/captcha-map-solver.git
+cd captcha-map-solver
 Bạn chỉ cần click đúp vào file **`setup.bat`** ở gốc dự án. Nó sẽ tự động:
 * Khởi tạo môi trường ảo `.venv`
 * Nâng cấp pip và cài đặt PyTorch CUDA optimized (hỗ trợ CUDA 12.1 đến 12.8+)
@@ -51,6 +53,6 @@ Trộn thêm 2.000 ảnh CAPTCHA sinh ngẫu nhiên mỗi epoch để mô hình 
 1. Đặt file checkpoint cũ (ví dụ: `best-epoch052.ckpt`) vào thư mục gốc của dự án.
 2. Chạy lệnh:
    ```bash
-   .venv\Scripts\python train.py --config configs/trocr_base_3090ti.yaml --resume best-epoch052.ckpt
+   .venv\Scripts\python train.py --config configs/trocr_base_3090ti.yaml --synth 2000 --resume best-epoch032.ckpt
    ```
-   *Mô hình sẽ tự động khôi phục optimizer, scheduler và chạy tiếp tục từ **Epoch 53**.*
+   *Mô hình sẽ tự động khôi phục optimizer, scheduler và chạy tiếp tục từ **Epoch 32**.*

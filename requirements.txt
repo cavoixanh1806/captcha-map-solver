@@ -4,16 +4,17 @@
 #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 #
 # The packages below are installed AFTER torch & torchvision.
-pytorch-lightning>=2.2,<3.0
-torchmetrics>=1.4
-transformers>=4.40
-sentencepiece>=0.2
-numpy>=1.26
-pandas>=2.0
-pillow>=10.0
-opencv-python>=4.8
-pyyaml>=6.0
-tqdm>=4.66
-matplotlib>=3.8
-tensorboard>=2.16
-scikit-learn>=1.4
+pytorch-lightning==2.6.1
+torchmetrics==1.9.0
+transformers==4.57.6
+sentencepiece==0.2.1
+numpy==2.4.4
+pandas==3.0.3
+pillow==12.2.0
+opencv-python==4.13.0.92
+pyyaml==6.0.3
+tqdm==4.67.3
+matplotlib==3.10.9
+tensorboard==2.20.0
+scikit-learn==1.8.0
+

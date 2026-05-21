@@ -31,13 +31,25 @@ REM Check Python
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [INFO] Python is NOT installed. Attempting to install Python 3.11 via winget...
-    winget install --id Python.Python.3.11 -e --source winget
+    winget install --id Python.Python.3.11 -e --source winget --silent --accept-package-agreements --accept-source-agreements
     if %errorlevel% equ 0 (
         echo.
         echo [SUCCESS] Python 3.11 installed successfully!
-        echo [WARNING] Please CLOSE this command prompt window, open a NEW one, and run setup.bat again to continue.
-        pause
-        exit /b
+        echo [INFO] Refreshing PATH environment variable so you don't need to restart this window...
+        
+        for /f "tokens=2*" %%A in ('reg query "HKLM\System\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+        for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USER_PATH=%%B"
+        set "PATH=%USER_PATH%;%SYS_PATH%"
+        
+        python --version >nul 2>&1
+        if %errorlevel% equ 0 (
+            echo [OK] Python is now active in this window! Continuing setup...
+        ) else (
+            echo [WARNING] Python is installed but cannot be accessed in this current window yet.
+            echo Please CLOSE this command prompt window, open a NEW one, and run setup.bat again to continue.
+            pause
+            exit /b
+        )
     ) else (
         echo [ERROR] Failed to install Python via winget. Please download and install Python 3.11 manually from: https://www.python.org/
         pause

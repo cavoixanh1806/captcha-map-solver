@@ -251,6 +251,62 @@ class TrOCRLitModel(pl.LightningModule):
         self._alphabet_token_ids = self._build_alphabet_token_ids()
         self._sample_logged = False
 
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        """
+        Tự động remap tên tham số cũ <-> mới trong state_dict của checkpoint 
+        để tương thích chéo giữa các phiên bản transformers khác nhau.
+        """
+        state_dict = checkpoint.get("state_dict", {})
+        if not state_dict:
+            return
+
+        current_keys = set(self.state_dict().keys())
+        ckpt_keys = set(state_dict.keys())
+
+        missing = current_keys - ckpt_keys
+        missing = {k for k in missing if "pooler" not in k}
+
+        if len(missing) > 0:
+            # Thử cách 1: Remap cũ -> mới (checkpoint dùng key cũ, model trong memory dùng key mới)
+            remapped_1 = {}
+            for k, v in state_dict.items():
+                new_k = k.replace("model.encoder.encoder.layer.", "model.encoder.layers.")
+                new_k = new_k.replace(".attention.attention.query.", ".attention.q_proj.")
+                new_k = new_k.replace(".attention.attention.key.",   ".attention.k_proj.")
+                new_k = new_k.replace(".attention.attention.value.", ".attention.v_proj.")
+                new_k = new_k.replace(".attention.output.dense.",    ".attention.o_proj.")
+                new_k = new_k.replace(".intermediate.dense.",        ".mlp.fc1.")
+                import re as _re
+                new_k = _re.sub(r"(layers\.\d+)\.output\.dense\.", r"\1.mlp.fc2.", new_k)
+                remapped_1[new_k] = v
+            
+            missing_1 = current_keys - set(remapped_1.keys())
+            missing_1 = {k for k in missing_1 if "pooler" not in k}
+
+            if len(missing_1) < len(missing):
+                checkpoint["state_dict"] = remapped_1
+                return
+
+            # Thử cách 2: Remap mới -> cũ (checkpoint dùng key mới, model trong memory dùng key cũ)
+            remapped_2 = {}
+            for k, v in state_dict.items():
+                new_k = k.replace("model.encoder.layers.", "model.encoder.encoder.layer.")
+                new_k = new_k.replace(".attention.q_proj.", ".attention.attention.query.")
+                new_k = new_k.replace(".attention.k_proj.", ".attention.attention.key.")
+                new_k = new_k.replace(".attention.v_proj.", ".attention.attention.value.")
+                new_k = new_k.replace(".attention.o_proj.", ".attention.output.dense.")
+                new_k = new_k.replace(".mlp.fc1.",          ".intermediate.dense.")
+                import re as _re
+                new_k = _re.sub(r"(layer\.\d+)\.mlp\.fc2\.", r"\1.output.dense.", new_k)
+                remapped_2[new_k] = v
+            
+            missing_2 = current_keys - set(remapped_2.keys())
+            missing_2 = {k for k in missing_2 if "pooler" not in k}
+
+            if len(missing_2) < len(missing):
+                checkpoint["state_dict"] = remapped_2
+                return
+
     def _build_alphabet_token_ids(self) -> List[int] | None:
         tok = self.processor.tokenizer
         ids: List[int] = []

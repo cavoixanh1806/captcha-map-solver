@@ -4,7 +4,7 @@ from PIL import Image
 from src.trocr import TrOCRLitModel
 
 class CaptchaSolver:
-    def __init__(self, checkpoint_path: str = "best-epoch052.ckpt"):
+    def __init__(self, checkpoint_path: str = "best-epoch032.ckpt"):
         """Initialize and load the TrOCR model into memory (do this once for fast inference)"""
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"[INFO] Loading model from {checkpoint_path} onto device: {self.device}...")
@@ -53,7 +53,7 @@ class CaptchaSolver:
 if __name__ == "__main__":
     import sys
     
-    ckpt = "best-epoch052.ckpt"
+    ckpt = "best-epoch032.ckpt"
     test_image = "data/map_00000.png"
     
     if len(sys.argv) > 1:

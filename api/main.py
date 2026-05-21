@@ -43,7 +43,7 @@ CONFIG_PATH = os.path.join(CURRENT_DIR, "config.json")
 
 def load_config() -> dict:
     default_config = {
-        "checkpoint_path": "best-epoch052.ckpt",
+        "checkpoint_path": "best-epoch032.ckpt",
         "host": "0.0.0.0",
         "port": 5000
     }
@@ -61,7 +61,7 @@ config = load_config()
 @app.on_event("startup")
 def startup_event():
     global solver
-    checkpoint_name = config.get("checkpoint_path", "best-epoch052.ckpt")
+    checkpoint_name = config.get("checkpoint_path", "best-epoch032.ckpt")
     
     # Try looking in parent dir if it's a relative path
     checkpoint_path = checkpoint_name
@@ -76,14 +76,24 @@ def startup_event():
             if os.path.exists(current_check):
                 checkpoint_path = current_check
 
-    print(f"[BOOT] Initializing model solver with checkpoint: {checkpoint_path}")
-    try:
-        solver = CaptchaSolver(checkpoint_path=checkpoint_path)
-        print("[BOOT] Active model is loaded and ready for predictions!")
-    except Exception as e:
-        print(f"[CRITICAL ERROR] Failed to load CAPTCHA model: {e}")
-        # We don't crash the server so health-check can report the error details
+    # Check if file exists
+    if not os.path.exists(checkpoint_path):
+        print(f"\n[CRITICAL ERROR] Checkpoint file '{checkpoint_name}' not found!")
+        print(f"================================================================================")
+        print(f"NOTE: Since model checkpoint files (*.ckpt) are ignored by git (due to being ~4GB),")
+        print(f"you must manually copy '{checkpoint_name}' from your local machine to this machine")
+        print(f"and place it in: {PARENT_DIR}")
+        print(f"================================================================================\n")
         solver = None
+    else:
+        print(f"[BOOT] Initializing model solver with checkpoint: {checkpoint_path}")
+        try:
+            solver = CaptchaSolver(checkpoint_path=checkpoint_path)
+            print("[BOOT] Active model is loaded and ready for predictions!")
+        except Exception as e:
+            print(f"[CRITICAL ERROR] Failed to load CAPTCHA model: {e}")
+            # We don't crash the server so health-check can report the error details
+            solver = None
 
 # 4. Request Models
 class Base64Request(BaseModel):
