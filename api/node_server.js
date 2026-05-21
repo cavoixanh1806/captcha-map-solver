@@ -10,12 +10,15 @@ const __dirname = path.dirname(__filename);
 // Cấu hình môi trường cho local model
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = '../'; 
+env.localModelPath = path.join(__dirname, '../'); 
 
-// --- CẤU HÌNH ĐẶC BIỆT CHO TERMUX/ANDROID ---
+// --- CẤU HÌNH ĐẶC BIỆT CHO TERMUX/ANDROID (Fix ERR_UNSUPPORTED_ESM_URL_SCHEME) ---
+// Ép dùng đường dẫn vật lý cục bộ cho Wasm engine
+const wasmFolder = path.join(__dirname, 'node_modules', 'onnxruntime-web', 'dist');
+env.backends.onnx.wasm.wasmPaths = `file://${wasmFolder}/`;
 env.backends.onnx.wasm.proxy = false; 
-env.backends.onnx.gpu = false;        
-// --------------------------------------------
+env.backends.onnx.wasm.numThreads = 1; // Snapdragon 8s Gen 3 chạy cực nhanh ngay cả với 1 luồng, tránh lỗi Worker
+// -------------------------------------------------------------------------------
 
 const app = express();
 const port = 5000;
