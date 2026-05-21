@@ -54,7 +54,7 @@ async function initModel() {
     console.log('[SYSTEM] Đang khởi động AI Engine (Wasm Mode)...');
     try {
         captchaSolver = await pipeline('image-to-text', 'onnx_model', {
-            device: 'wasm', 
+            device: 'cpu', // Trong Node.js, 'cpu' sẽ sử dụng Wasm backend
             dtype: 'fp32'
         });
         isReady = true;
