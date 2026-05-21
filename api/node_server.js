@@ -75,15 +75,23 @@ app.post('/solve-file', upload.single('file'), async (req, res) => {
         const startTime = performance.now();
         console.log(`[API] Đang xử lý: ${req.file.originalname}`);
         
-        // Lưu file tạm vào máy (Cực kỳ quan trọng để Android đọc được)
+        // Lưu file tạm vào máy
         fs.writeFileSync(tmpFilePath, req.file.buffer);
 
-        // Truyền đường dẫn TUYỆT ĐỐI vào model
-        const result = await captchaSolver(tmpFilePath);
-        const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
+        // Chạy suy luận với các tham số tối ưu cho CAPTCHA (5 ký tự)
+        const result = await captchaSolver(tmpFilePath, {
+            max_new_tokens: 10,
+            do_sample: false,
+            num_beams: 1, // Beam search = 1 để chạy nhanh nhất có thể
+        });
+        
+        console.log('[DEBUG] Raw AI Output:', JSON.stringify(result));
+        
+        const rawText = result[0].generated_text || "";
+        const text = rawText.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
-        console.log(`[API] => Kết quả: ${text} (${timeTaken}ms)`);
+        console.log(`[API] => Kết quả: ${text} (Gốc: "${rawText}") - ${timeTaken}ms`);
 
         res.json({ success: true, captcha: text, inference_time_ms: parseFloat(timeTaken) });
     } catch (error) {
