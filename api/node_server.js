@@ -1,7 +1,8 @@
 import express from 'express';
 import multer from 'multer';
-import { pipeline, env, RawImage } from '@huggingface/transformers';
+import { pipeline, env } from '@huggingface/transformers';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,22 +13,23 @@ env.allowRemoteModels = false;
 env.allowLocalModels = true;
 env.localModelPath = path.join(__dirname, '../'); 
 
-// --- CẤU HÌNH ĐẶC BIỆT CHO TERMUX/ANDROID (Fix ERR_UNSUPPORTED_ESM_URL_SCHEME) ---
-// Ép dùng đường dẫn vật lý cục bộ cho Wasm engine
+// --- CẤU HÌNH ĐẶC BIỆT CHO TERMUX/ANDROID ---
 const wasmFolder = path.join(__dirname, 'node_modules', 'onnxruntime-web', 'dist');
 env.backends.onnx.wasm.wasmPaths = `file://${wasmFolder}/`;
 env.backends.onnx.wasm.proxy = false; 
-env.backends.onnx.wasm.numThreads = 1; // Snapdragon 8s Gen 3 chạy cực nhanh ngay cả với 1 luồng, tránh lỗi Worker
-// -------------------------------------------------------------------------------
+env.backends.onnx.wasm.numThreads = 1;
+// --------------------------------------------
 
 const app = express();
 const port = 5000;
 const upload = multer({ storage: multer.memoryStorage() });
+const tmpDir = path.join(__dirname, 'tmp');
+if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public'))); 
 
-// --- HỆ THỐNG LƯU LOG ĐỂ HIỂN THỊ LÊN WEBAPP ---
+// --- HỆ THỐNG LƯU LOG ---
 const MAX_LOGS = 200;
 const appLogs = [];
 const originalLog = console.log;
@@ -40,14 +42,8 @@ function captureLog(type, args) {
     if (appLogs.length > MAX_LOGS) appLogs.shift();
 }
 
-console.log = function(...args) {
-    originalLog.apply(console, args);
-    captureLog('info', args);
-};
-console.error = function(...args) {
-    originalError.apply(console, args);
-    captureLog('error', args);
-};
+console.log = function(...args) { originalLog.apply(console, args); captureLog('info', args); };
+console.error = function(...args) { originalError.apply(console, args); captureLog('error', args); };
 
 // --- KHỞI TẠO MODEL ---
 let captchaSolver;
@@ -57,7 +53,7 @@ async function initModel() {
     console.log('[SYSTEM] Đang khởi động AI Engine (Wasm Mode)...');
     try {
         captchaSolver = await pipeline('image-to-text', 'onnx_model', {
-            device: 'cpu', // Trong Node.js, 'cpu' sẽ sử dụng Wasm backend
+            device: 'cpu',
             dtype: 'fp32'
         });
         isReady = true;
@@ -71,16 +67,19 @@ async function initModel() {
 
 // 1. Giải mã qua File Upload
 app.post('/solve-file', upload.single('file'), async (req, res) => {
-    if (!isReady) return res.status(503).json({ success: false, error: "Model đang tải, vui lòng thử lại sau" });
-    if (!req.file) return res.status(400).json({ success: false, error: "Không tìm thấy file ảnh" });
+    if (!isReady) return res.status(503).json({ success: false, error: "Model đang tải" });
+    if (!req.file) return res.status(400).json({ success: false, error: "Không tìm thấy file" });
 
+    const tmpFilePath = path.join(tmpDir, `tmp_${Date.now()}_${req.file.originalname}`);
     try {
         const startTime = performance.now();
-        console.log(`[API] Đang xử lý file ảnh: ${req.file.originalname} (${req.file.size} bytes)`);
+        console.log(`[API] Đang xử lý: ${req.file.originalname}`);
         
-        // Sử dụng RawImage để đọc Buffer một cách an toàn trong môi trường Node.js
-        const image = await RawImage.read(req.file.buffer);
-        const result = await captchaSolver(image);
+        // Lưu file tạm vào máy (Cực kỳ quan trọng để Android đọc được)
+        fs.writeFileSync(tmpFilePath, req.file.buffer);
+
+        // Truyền đường dẫn TUYỆT ĐỐI vào model
+        const result = await captchaSolver(tmpFilePath);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
@@ -90,27 +89,29 @@ app.post('/solve-file', upload.single('file'), async (req, res) => {
     } catch (error) {
         console.error('[API ERROR]', error.message);
         res.status(500).json({ success: false, error: error.message });
+    } finally {
+        // Xóa file tạm ngay lập tức
+        if (fs.existsSync(tmpFilePath)) fs.unlinkSync(tmpFilePath);
     }
 });
 
-// 2. Giải mã qua chuỗi Base64
+// 2. Giải mã qua Base64
 app.post('/solve-base64', async (req, res) => {
     if (!isReady) return res.status(503).json({ success: false, error: "Model đang tải" });
-    if (!req.body.image_base64) return res.status(400).json({ success: false, error: "Thiếu trường image_base64" });
+    if (!req.body.image_base64) return res.status(400).json({ success: false, error: "Thiếu base64" });
 
+    const tmpFilePath = path.join(tmpDir, `tmp_b64_${Date.now()}.png`);
     try {
         const startTime = performance.now();
-        console.log(`[API] Nhận request Base64 (độ dài: ${req.body.image_base64.length} chars)`);
+        console.log(`[API] Nhận request Base64`);
         
         let b64Data = req.body.image_base64;
-        if (b64Data.includes(',')) {
-            b64Data = b64Data.split(',')[1];
-        }
+        if (b64Data.includes(',')) b64Data = b64Data.split(',')[1];
         
-        const buffer = Buffer.from(b64Data, 'base64');
-        const image = await RawImage.read(buffer);
+        // Ghi file từ Base64
+        fs.writeFileSync(tmpFilePath, Buffer.from(b64Data, 'base64'));
 
-        const result = await captchaSolver(image);
+        const result = await captchaSolver(tmpFilePath);
         const text = result[0].generated_text.replace(/ /g, '').toUpperCase();
         
         const timeTaken = (performance.now() - startTime).toFixed(2);
@@ -120,33 +121,15 @@ app.post('/solve-base64', async (req, res) => {
     } catch (error) {
         console.error('[API ERROR]', error.message);
         res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (fs.existsSync(tmpFilePath)) fs.unlinkSync(tmpFilePath);
     }
 });
 
-// 3. Lấy Logs cho WebApp
-app.get('/api/logs', (req, res) => {
-    res.json(appLogs);
-});
-
-// 4. Trạng thái Server
-app.get('/api/status', (req, res) => {
-    res.json({
-        status: isReady ? 'online' : 'starting',
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage()
-    });
-});
-
-// 5. Health Check
-app.get('/health', (req, res) => {
-    res.json({
-        status: isReady ? 'healthy' : 'initializing',
-        engine: 'transformers.js (Wasm)'
-    });
-});
+app.get('/api/logs', (req, res) => res.json(appLogs));
+app.get('/api/status', (req, res) => res.json({ status: isReady ? 'online' : 'starting', uptime: process.uptime(), memoryUsage: process.memoryUsage() }));
+app.get('/health', (req, res) => res.json({ status: isReady ? 'healthy' : 'initializing', engine: 'transformers.js (Wasm)' }));
 
 initModel().then(() => {
-    app.listen(port, '0.0.0.0', () => {
-        console.log(`[SYSTEM] TrOCR Local Server đang chạy tại cổng ${port}`);
-    });
+    app.listen(port, '0.0.0.0', () => console.log(`[SYSTEM] Server đang chạy tại cổng ${port}`));
 });
