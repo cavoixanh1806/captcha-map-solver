@@ -40,11 +40,17 @@ npm install --force
 ---
 
 ## 🧠 Bước 3: Tải Model AI từ Hugging Face
-Sử dụng lệnh Python để tránh lỗi xác thực SSL/Rust trên điện thoại:
+Do một số lỗi bảo mật SSL (Rust panic) trên Android, bạn **không nên** dùng lệnh `hf download` trực tiếp. Hãy sử dụng script tải bằng `curl` mà tôi đã viết sẵn:
 
 ```bash
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='cavoixanh1806/captcha-trocr-onnx', local_dir='../onnx_model', local_dir_use_symlinks=False)"
+# Cấp quyền thực thi cho script
+chmod +x download_model.sh
+
+# Chạy script tải model
+./download_model.sh
 ```
+
+*(Script này sẽ tự động tải các file cấu hình và model ONNX nặng ~1.5GB về máy của bạn một cách an toàn).*
 
 ---
 
