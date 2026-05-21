@@ -87,23 +87,30 @@ def _find_cached_model(model_id: str) -> bool:
 # ────────────────────────────────────────────────────────────────────────
 # Key remapping: BEiT cũ (transformers <4.47) → BEiT mới (≥4.47)
 #
-# Cũ: encoder.encoder.layer.N.attention.attention.query.*
-# Mới: encoder.layers.N.attention.q_proj.*
+# Chú ý: tất cả rules đều anchor vào ^encoder để chỉ áp dụng cho
+# encoder BEiT — KHÔNG ảnh hưởng decoder (GPT2/RoBERTa) keys.
 # ────────────────────────────────────────────────────────────────────────
 _REMAP_RULES: list[tuple[str, str]] = [
-    (r"encoder\.encoder\.layer\.(\d+)\.",   r"encoder.layers.\1."),
-    (r"\.attention\.attention\.query\.",     ".attention.q_proj."),
-    (r"\.attention\.attention\.key\.",       ".attention.k_proj."),
-    (r"\.attention\.attention\.value\.",     ".attention.v_proj."),
-    (r"\.attention\.output\.dense\.",        ".attention.o_proj."),
-    (r"\.intermediate\.dense\.",             ".mlp.fc1."),
-    (r"(layers\.\d+)\.output\.dense\.",      r"\1.mlp.fc2."),
-    (r"\.attention\.attention\.relative_position_bias_table",
-     ".attention.relative_position_bias_table"),
-    (r"\.attention\.attention\.relative_position_index",
-     ".attention.relative_position_index"),
-    (r"\.lambda_1$", ".layer_scale1"),
-    (r"\.lambda_2$", ".layer_scale2"),
+    # [1] encoder.encoder.layer.N. → encoder.layers.N.
+    (r"^encoder\.encoder\.layer\.(\d+)\.",               r"encoder.layers.\1."),
+    # [2-4] attention sub-keys (encoder-only, anchor ^encoder.layers)
+    (r"^(encoder\.layers\.\d+)\.attention\.attention\.query\.",  r"\1.attention.q_proj."),
+    (r"^(encoder\.layers\.\d+)\.attention\.attention\.key\.",    r"\1.attention.k_proj."),
+    (r"^(encoder\.layers\.\d+)\.attention\.attention\.value\.",  r"\1.attention.v_proj."),
+    # [5] attention output → o_proj (encoder-only)
+    (r"^(encoder\.layers\.\d+)\.attention\.output\.dense\.",     r"\1.attention.o_proj."),
+    # [6] FFN fc1 — intermediate.dense (encoder-only, NOT decoder)
+    (r"^(encoder\.layers\.\d+)\.intermediate\.dense\.",          r"\1.mlp.fc1."),
+    # [7] FFN fc2 — layer output dense (encoder-only)
+    (r"^(encoder\.layers\.\d+)\.output\.dense\.",                r"\1.mlp.fc2."),
+    # [8-9] relative position bias (encoder-only)
+    (r"^(encoder\.layers\.\d+\.attention)\.attention\.relative_position_bias_table",
+     r"\1.relative_position_bias_table"),
+    (r"^(encoder\.layers\.\d+\.attention)\.attention\.relative_position_index",
+     r"\1.relative_position_index"),
+    # [10-11] layer scale params (BEiT encoder-only)
+    (r"^(encoder\.layers\.\d+)\.lambda_1$", r"\1.layer_scale1"),
+    (r"^(encoder\.layers\.\d+)\.lambda_2$", r"\1.layer_scale2"),
 ]
 
 def _remap_beit_keys(sd: dict) -> dict:
@@ -217,16 +224,23 @@ def load_model(
     else:
         print(col(C.GREEN, "   ✅ Fine-tuned weights: OK"))
 
-    # ── B5: INT8 Dynamic Quantization ─────────────────────────────────
+    # ── B5: INT8 Dynamic Quantization (opt-in) ───────────────────────────
     if use_int8:
-        print(col(C.CYAN, "   Quantize INT8 (QNNPACK ARM)..."))
+        print(col(C.YELLOW, "   ⚠️  INT8 quantization — có thể giảm accuracy trên một số thiết bị"))
+        print(col(C.YELLOW, "      (qnnpack reduce_range bug). Nếu sai nhiều → bỏ flag --int8"))
         t_q = time.time()
-        model = torch.quantization.quantize_dynamic(
-            model,
-            {torch.nn.Linear},
-            dtype=torch.qint8,
-        )
-        print(col(C.GREEN, f"   ✅ INT8 done ({time.time()-t_q:.1f}s) — ~2x faster on ARM NEON"))
+        try:
+            # torchao (khuyến nghị bởi PyTorch 2.10+)
+            import torchao
+            from torchao.quantization import quantize_, int8_dynamic_activation_int8_weight
+            quantize_(model, int8_dynamic_activation_int8_weight())
+            print(col(C.GREEN, f"   ✅ INT8 (torchao) done ({time.time()-t_q:.1f}s)"))
+        except ImportError:
+            # Fallback: quantize_dynamic cũ (có thể có bug qnnpack)
+            model = torch.quantization.quantize_dynamic(   # type: ignore[attr-defined]
+                model, {torch.nn.Linear}, dtype=torch.qint8,
+            )
+            print(col(C.GREEN, f"   ✅ INT8 (legacy) done ({time.time()-t_q:.1f}s)"))
 
     model.eval()
     elapsed = time.time() - t0
@@ -278,12 +292,12 @@ def main() -> None:
     parser.add_argument("--model_dir", default=None,
                         help="Base model local (không download)")
     parser.add_argument("--offline",   action="store_true")
-    parser.add_argument("--beams",     type=int, default=1,
-                        help="1=greedy/nhanh nhất | 2=cân bằng | 8=chính xác nhất")
+    parser.add_argument("--beams",     type=int, default=2,
+                        help="1=greedy/fastest | 2=balanced (default) | 8=most accurate")
     parser.add_argument("--threads",   type=int, default=4,
                         help="Snapdragon 8s Gen3: 4 big cores (X4+A720x3)")
-    parser.add_argument("--no_int8",   action="store_true",
-                        help="Tắt INT8 quantization (dùng float32)")
+    parser.add_argument("--int8",      action="store_true",
+                        help="Bật INT8 quantization (nhanh hơn nhưng có thể giảm accuracy)")
     parser.add_argument("--no_color",  action="store_true")
     args = parser.parse_args()
 
@@ -293,16 +307,20 @@ def main() -> None:
     # ── Cấu hình threads cho Snapdragon ─────────────────────────────
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(1)       # tránh overhead context switching
-    print(col(C.BOLD, f"🔧 Snapdragon config: {args.threads} threads | "
-              f"beams={args.beams} | int8={'OFF' if args.no_int8 else 'ON'}"))
+    torch.set_flush_denormal(True)         # tránh slow denormal float trên ARM
+    n_threads = torch.get_num_threads()
+    print(col(C.BOLD, f"🔧 Snapdragon config: {n_threads} threads | "
+              f"beams={args.beams} | int8={'ON' if args.int8 else 'OFF (float32)'}"))
 
     # Ước tính tốc độ
     est_per_img = {
-        (1, True): 1.5, (1, False): 3,
-        (2, True): 2.5, (2, False): 5,
-        (8, True): 8,   (8, False): 15,
-    }.get((args.beams, not args.no_int8), args.beams * 2)
-    print(col(C.DIM, f"   Ước tính: ~{est_per_img:.0f}s/ảnh\n"))
+        (1, True): 1.5, (1, False): 8,
+        (2, True): 2.5, (2, False): 15,
+        (8, True): 8,   (8, False): 60,
+    }.get((args.beams, args.int8), args.beams * 8)
+    print(col(C.DIM, f"   Ước tính: ~{est_per_img:.0f}s/ảnh (float32, CPU)"))
+    print(col(C.DIM,  "   Nhanh hơn: python mobile_test_ac_onnx.py (ONNX)"))
+    print()
 
     # ── Tìm ảnh ──────────────────────────────────────────────────────
     ac_dir = Path(args.ac_dir)
@@ -330,7 +348,7 @@ def main() -> None:
         str(ckpt),
         model_dir=args.model_dir,
         offline=args.offline,
-        use_int8=not args.no_int8,
+        use_int8=args.int8,
     )
 
     # ── Bảng kết quả ─────────────────────────────────────────────────
