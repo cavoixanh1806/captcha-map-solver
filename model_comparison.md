@@ -10,16 +10,15 @@ Phương pháp đánh giá: Chạy suy luận (inference) trên **500 ảnh đ�
 
 ## 📊 Kết quả Tổng hợp
 
-| Chỉ số | Model 32 (`best-epoch032.ckpt`) | ONNX Model 32 | Model 72 (`best-epoch072.ckpt`) |
+| Chỉ số | Model 32 (`best-epoch032.ckpt`) | ONNX Model 32 (FP16) | Model 72 (`best-epoch072.ckpt`) |
 | :--- | :---: | :---: | :---: |
 | **Độ chính xác (Accuracy)** | **98.40%** | **98.40%** | **98.80%** (Tốt nhất) |
 | **Số ảnh đoán đúng** | 492 / 500 | 492 / 500 | 494 / 500 |
-| **Số ảnh đoán sai** | 8 | 8 | 6 |
-| **Số lỗi khắc phục được** | - | - | 7 trường hợp (M32 sai, M72 đúng) |
-| **Số lỗi phát sinh mới** | - | - | 5 trường hợp (M32 đúng, M72 sai) |
+| **Dung lượng Model** | ~1.3 GB | **~750 MB** | ~1.3 GB |
+| **Độ chính xác so với gốc** | - | **100% (Khớp hoàn toàn)** | - |
 
 > [!NOTE]
-> Tổng số ảnh bị đoán sai bởi ít nhất một trong hai mô hình là **13 ảnh** (chiếm tỉ lệ 2.6%). Mô hình ONNX được xuất từ `best-epoch032.ckpt` cho kết quả **chính xác 100%** (không suy giảm hiệu suất) so với bản gốc chạy trên PyTorch.
+> Tổng số ảnh bị đoán sai bởi ít nhất một trong hai mô hình là **13 ảnh** (chiếm tỉ lệ 2.6%). Mô hình ONNX định dạng **FP16** cho kết quả khớp tuyệt đối 100% với bản PyTorch gốc, trong khi dung lượng giảm đi một nửa, cực kỳ phù hợp để chạy trên Snapdragon 8s Gen 3.
 
 ---
 
@@ -27,7 +26,7 @@ Phương pháp đánh giá: Chạy suy luận (inference) trên **500 ảnh đ�
 
 Dưới đây là danh sách toàn bộ các trường hợp có ít nhất một mô hình dự đoán sai:
 
-| STT | Tên File | Nhãn Thật | Model 32 | ONNX (M32) | Model 72 | Trạng thái chi tiết |
+| STT | Tên File | Nhãn Thật | Model 32 | ONNX (FP16) | Model 72 | Trạng thái chi tiết |
 | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
 | **1** | `map_00013.png` | **FYEVU** | `EYEVU` | `EYEVU` | `FYEVU` | 🟢 Model 72 khắc phục (Sửa `E` thành `F`) |
 | **2** | `map_00065.png` | **VHMLW** | `VHMYW` | `VHMYW` | `VHMLW` | 🟢 Model 72 khắc phục (Sửa `Y` thành `L`) |
